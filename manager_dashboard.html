@@ -1,0 +1,1551 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة تحكم الإدارة العليا — SaaS Control Center</title>
+
+    <!-- استدعاء حزمة Firebase (App + Auth + Realtime Database) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #070913;
+            --bg-panel: #0f172a;
+            --bg-card: #131c31;
+            --bg-input: #0b0d1e;
+            --border-neon: #3b82f6;
+            --border-soft: rgba(59, 130, 246, 0.28);
+            --glow-blue: rgba(59, 130, 246, 0.35);
+            --accent-green: #00ff66;
+            --accent-red: #ff1a40;
+            --accent-yellow: #facc15;
+            --accent-purple: #a855f7;
+            --accent-cyan: #38bdf8;
+            --text-main: #ffffff;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            direction: rtl;
+        }
+
+        /* ==================== شاشة تسجيل الدخول الإداري ==================== */
+        #login-shield {
+            position: fixed;
+            inset: 0;
+            background-color: var(--bg-dark);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+        }
+
+        .login-box {
+            width: 100%;
+            max-width: 420px;
+            background-color: var(--bg-panel);
+            border: 2px solid var(--border-neon);
+            border-radius: 18px;
+            padding: 28px 24px;
+            box-shadow: 0 0 35px var(--glow-blue);
+            text-align: center;
+        }
+
+        .login-box h2 {
+            margin: 0 0 8px 0;
+            color: var(--accent-cyan);
+            font-size: 22px;
+        }
+
+        .login-box p {
+            margin: 0 0 20px 0;
+            color: var(--text-muted);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .login-error {
+            display: none;
+            background-color: rgba(255, 26, 64, 0.14);
+            border: 1px solid var(--accent-red);
+            color: var(--accent-red);
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 14px;
+            text-align: right;
+            line-height: 1.5;
+        }
+
+        /* ==================== الهيكل الرئيسي ==================== */
+        #dashboard-app {
+            display: none;
+            max-width: 1380px;
+            margin: 0 auto;
+            padding: 18px 16px 60px;
+        }
+
+        .top-bar {
+            background-color: var(--bg-panel);
+            border: 2px solid var(--border-neon);
+            border-radius: 16px;
+            padding: 16px 20px;
+            margin-bottom: 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            box-shadow: 0 0 22px var(--glow-blue);
+        }
+
+        .top-bar-title h1 {
+            margin: 0;
+            font-size: 22px;
+            color: var(--accent-cyan);
+        }
+
+        .top-bar-title span {
+            display: block;
+            margin-top: 4px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .top-bar-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .admin-badge {
+            background-color: var(--bg-card);
+            border: 1px solid var(--accent-green);
+            color: var(--accent-green);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        /* ==================== بطاقات الإحصائيات ==================== */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+
+        .kpi-card {
+            background-color: var(--bg-panel);
+            border: 1.5px solid var(--border-soft);
+            border-radius: 14px;
+            padding: 14px 16px;
+            text-align: center;
+        }
+
+        .kpi-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            font-weight: bold;
+        }
+
+        .kpi-value {
+            font-size: 26px;
+            font-weight: bold;
+            margin-top: 6px;
+            direction: ltr;
+        }
+
+        /* ==================== التبويبات ==================== */
+        .tabs-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            padding: 11px 20px;
+            border-radius: 12px;
+            border: 1.5px solid var(--border-soft);
+            background-color: var(--bg-panel);
+            color: var(--text-main);
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .tab-btn.active {
+            border-color: var(--accent-cyan);
+            background-color: #172544;
+            color: var(--accent-cyan);
+            box-shadow: 0 0 14px var(--glow-blue);
+        }
+
+        .tab-panel {
+            display: none;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        /* ==================== لوحات الإدخال ==================== */
+        .panel-box {
+            background-color: var(--bg-panel);
+            border: 1.5px solid var(--border-soft);
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 18px;
+        }
+
+        .panel-box h3 {
+            margin: 0 0 14px 0;
+            font-size: 17px;
+            color: var(--accent-cyan);
+            border-bottom: 1px solid var(--border-soft);
+            padding-bottom: 10px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 12px;
+            align-items: end;
+        }
+
+        .field-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: bold;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 11px 12px;
+            background-color: var(--bg-input);
+            border: 1.5px solid var(--border-soft);
+            color: var(--text-main);
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: bold;
+            outline: none;
+            font-family: inherit;
+        }
+
+        input:focus, select:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 10px var(--glow-blue);
+        }
+
+        .btn {
+            padding: 10px 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: inherit;
+            transition: transform 0.15s, filter 0.15s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn:active {
+            transform: scale(0.96);
+        }
+
+        .btn-primary { background-color: var(--accent-green); color: #000; }
+        .btn-info { background-color: #2563eb; color: #fff; }
+        .btn-warning { background-color: var(--accent-yellow); color: #000; }
+        .btn-purple { background-color: var(--accent-purple); color: #fff; }
+        .btn-danger { background-color: var(--accent-red); color: #fff; }
+        .btn-muted { background-color: #334155; color: #fff; }
+
+        /* ==================== شريط البحث والفلترة ==================== */
+        .filter-bar {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+
+        .filter-bar input {
+            flex: 2;
+            min-width: 220px;
+        }
+
+        .filter-bar select {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        /* ==================== الجداول ==================== */
+        .table-scroll {
+            width: 100%;
+            overflow-x: auto;
+            border: 1.5px solid var(--border-soft);
+            border-radius: 14px;
+            background-color: var(--bg-panel);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 960px;
+        }
+
+        th, td {
+            padding: 12px 10px;
+            text-align: right;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            font-size: 13px;
+            vertical-align: middle;
+        }
+
+        th {
+            background-color: #162038;
+            color: var(--accent-cyan);
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        tr:hover td {
+            background-color: rgba(59, 130, 246, 0.06);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .badge-active { background-color: rgba(0, 255, 102, 0.15); color: var(--accent-green); border: 1px solid var(--accent-green); }
+        .badge-suspended { background-color: rgba(255, 26, 64, 0.15); color: var(--accent-red); border: 1px solid var(--accent-red); }
+        .badge-expired { background-color: rgba(250, 204, 21, 0.15); color: var(--accent-yellow); border: 1px solid var(--accent-yellow); }
+        .badge-plan-offline { background-color: rgba(148, 163, 184, 0.15); color: #e2e8f0; border: 1px solid #94a3b8; }
+        .badge-plan-pro { background-color: rgba(56, 189, 248, 0.15); color: var(--accent-cyan); border: 1px solid var(--accent-cyan); }
+        .badge-plan-vip { background-color: rgba(168, 85, 247, 0.18); color: #d8b4fe; border: 1px solid var(--accent-purple); }
+
+        .actions-wrap {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .actions-wrap .btn {
+            padding: 7px 10px;
+            font-size: 12px;
+        }
+
+        .cell-sub {
+            display: block;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+
+        .inline-input {
+            padding: 6px 8px;
+            font-size: 13px;
+            border-radius: 8px;
+        }
+
+        /* ==================== النوافذ المنبثقة ==================== */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.85);
+            z-index: 10000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+        }
+
+        .modal-card {
+            width: 100%;
+            max-width: 560px;
+            max-height: 86vh;
+            overflow-y: auto;
+            background-color: var(--bg-panel);
+            border: 2px solid var(--border-neon);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 0 30px var(--glow-blue);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-soft);
+            padding-bottom: 10px;
+            margin-bottom: 14px;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 18px;
+            color: var(--accent-cyan);
+        }
+
+        .modal-list-item {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-soft);
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .toast-bar {
+            position: fixed;
+            bottom: 18px;
+            left: 18px;
+            z-index: 12000;
+            background-color: var(--bg-panel);
+            border: 2px solid var(--accent-green);
+            color: var(--text-main);
+            padding: 10px 18px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: bold;
+            display: none;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.65);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ==================== شاشة المصادقة عبر Firebase Auth (Admin Claim) ==================== -->
+    <div id="login-shield">
+        <div class="login-box">
+            <h2>🛡️ بوابة الإدارة العليا</h2>
+            <p>تسجيل الدخول محمي عبر Firebase Authentication والتحقق الإلزامي من صلاحية <strong>Admin Claim</strong>.</p>
+            <div id="loginError" class="login-error"></div>
+
+            <div class="field-group" style="text-align: right; margin-bottom: 12px;">
+                <label for="admin-email">البريد الإلكتروني للإدارة</label>
+                <input type="email" id="admin-email" placeholder="admin@example.com" autocomplete="username" dir="ltr">
+            </div>
+
+            <div class="field-group" style="text-align: right; margin-bottom: 18px;">
+                <label for="admin-pass">كلمة المرور</label>
+                <input type="password" id="admin-pass" placeholder="••••••••" autocomplete="current-password" dir="ltr">
+            </div>
+
+            <button type="button" id="loginBtn" class="btn btn-primary" style="width: 100%; padding: 13px; font-size: 15px;" onclick="signInAdmin()">
+                🔐 تسجيل الدخول الآمن
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== لوحة التحكم الرئيسية ==================== -->
+    <div id="dashboard-app">
+        <div class="top-bar">
+            <div class="top-bar-title">
+                <h1 id="dashboardTitle">🛠️ مركز إدارة المتاجر والاشتراكات (V5 Commercial)</h1>
+                <span>المسار السحابي المعزول: Seraj_SaaS_Stores/{storeId} | النسخ المحمية: Store_Backups/{storeId}/snapshots</span>
+            </div>
+            <div class="top-bar-meta">
+                <span class="admin-badge" id="adminEmailBadge">Admin</span>
+                <button type="button" class="btn btn-danger" onclick="signOutAdmin()">🚪 تسجيل خروج</button>
+            </div>
+        </div>
+
+        <!-- مؤشرات سريعة -->
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-label">إجمالي المتاجر المسجلة</div>
+                <div class="kpi-value" style="color: var(--accent-cyan);" id="kpiTotalStores">0</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">المتاجر النشطة</div>
+                <div class="kpi-value" style="color: var(--accent-green);" id="kpiActiveStores">0</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">الموقوفة / المنتهية</div>
+                <div class="kpi-value" style="color: var(--accent-red);" id="kpiInactiveStores">0</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">باقات الأوفلاين (جهاز واحد)</div>
+                <div class="kpi-value" style="color: var(--accent-yellow);" id="kpiOfflineStores">0</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">أكواد تفعيل أوفلاين متاحة</div>
+                <div class="kpi-value" style="color: var(--accent-purple);" id="kpiUnusedCodes">0</div>
+            </div>
+        </div>
+
+        <!-- التبويبات -->
+        <div class="tabs-row">
+            <button type="button" class="tab-btn active" id="tabBtnStores" onclick="switchTab('stores')">🏪 المتاجر والاشتراكات</button>
+            <button type="button" class="tab-btn" id="tabBtnCodes" onclick="switchTab('codes')">🔑 أكواد تفعيل باقة الأوفلاين (offline_single)</button>
+        </div>
+
+        <!-- ==================== التبويب 1: إدارة المتاجر ==================== -->
+        <div id="tab-stores" class="tab-panel active">
+            <div class="panel-box">
+                <h3>➕ إضافة محل / اشتراك جديد</h3>
+                <div class="form-grid">
+                    <div class="field-group">
+                        <label for="new-store-id">كود المحل الفريد (storeId - إنجليزي)</label>
+                        <input type="text" id="new-store-id" placeholder="مثال: store_cairo_01" dir="ltr">
+                    </div>
+                    <div class="field-group">
+                        <label for="new-store-name">اسم المحل / العميل</label>
+                        <input type="text" id="new-store-name" placeholder="اسم النشاط التجاري">
+                    </div>
+                    <div class="field-group">
+                        <label for="new-store-email">إيميل المالك (مرجع Auth)</label>
+                        <input type="email" id="new-store-email" placeholder="owner@shop.com" dir="ltr">
+                    </div>
+                    <div class="field-group">
+                        <label for="new-store-phone">هاتف المالك</label>
+                        <input type="text" id="new-store-phone" placeholder="01xxxxxxxxx" dir="ltr">
+                    </div>
+                    <div class="field-group">
+                        <label for="new-store-plan">الباقة</label>
+                        <select id="new-store-plan" onchange="onNewPlanChanged()">
+                            <option value="offline_single">باقة جهاز واحد أوفلاين (offline_single)</option>
+                            <option value="pro" selected>باقة المحترف السحابية (pro)</option>
+                            <option value="vip">باقة VIP + ذكاء اصطناعي (vip)</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label for="new-store-devices">الحد الأقصى للأجهزة (max_devices)</label>
+                        <input type="number" id="new-store-devices" value="3" min="1" max="50" dir="ltr">
+                    </div>
+                    <div class="field-group">
+                        <label for="new-store-expiry">تاريخ انتهاء الاشتراك</label>
+                        <input type="date" id="new-store-expiry" dir="ltr">
+                    </div>
+                    <div class="field-group">
+                        <button type="button" class="btn btn-primary" style="width: 100%; height: 44px;" onclick="createNewClient()">
+                            ✅ إنشاء وتفعيل المحل
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="filter-bar">
+                <input type="text" id="storeSearchInput" placeholder="🔍 ابحث بكود المحل أو اسم العميل أو الإيميل أو الموبايل..." oninput="debouncedRenderStores()">
+                <select id="planFilterSelect" onchange="renderStoresTable()">
+                    <option value="all">كل الباقات</option>
+                    <option value="offline_single">أوفلاين (offline_single)</option>
+                    <option value="pro">محترف (pro)</option>
+                    <option value="vip">VIP (vip)</option>
+                </select>
+                <select id="statusFilterSelect" onchange="renderStoresTable()">
+                    <option value="all">كل الحالات</option>
+                    <option value="active">نشط فقط</option>
+                    <option value="suspended">موقوف فقط</option>
+                    <option value="expired">منتهي الصلاحية</option>
+                </select>
+            </div>
+
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>كود المحل والمالك</th>
+                            <th>الباقة</th>
+                            <th>الحد الأقصى للأجهزة</th>
+                            <th>تاريخ الانتهاء (expiry_ts)</th>
+                            <th>الحالة</th>
+                            <th>إجراءات الإدارة</th>
+                        </tr>
+                    </thead>
+                    <tbody id="clients-table-body">
+                        <tr><td colspan="6" style="text-align:center; padding:24px; color:var(--text-muted);">جاري تحميل المتاجر...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ==================== التبويب 2: أكواد تفعيل الأوفلاين ==================== -->
+        <div id="tab-codes" class="tab-panel">
+            <div class="panel-box">
+                <h3>🔑 إصدار كود تفعيل جديد (باقة جهاز واحد أوفلاين - offline_single)</h3>
+                <div class="form-grid">
+                    <div class="field-group">
+                        <label for="code-store-label">اسم العميل / ملاحظة الكود</label>
+                        <input type="text" id="code-store-label" placeholder="مثال: محل النور - الفرع الرئيسي">
+                    </div>
+                    <div class="field-group">
+                        <label for="code-custom-val">كود التفعيل (اتركه فارغاً للتوليد التلقائي)</label>
+                        <input type="text" id="code-custom-val" placeholder="OFF-XXXX-XXXX" dir="ltr">
+                    </div>
+                    <div class="field-group">
+                        <button type="button" class="btn btn-primary" style="width: 100%; height: 44px;" onclick="generateActivationCode()">
+                            ⚡ توليد وحفظ الكود
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="filter-bar">
+                <input type="text" id="codeSearchInput" placeholder="🔍 ابحث بكود التفعيل أو اسم المحل أو معرف الجهاز..." oninput="debouncedRenderCodes()">
+            </div>
+
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>كود التفعيل</th>
+                            <th>العميل / الملاحظة</th>
+                            <th>الحالة</th>
+                            <th>المحل والجهاز المرتبط</th>
+                            <th>تاريخ التفعيل</th>
+                            <th>إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="codes-table-body">
+                        <tr><td colspan="6" style="text-align:center; padding:24px; color:var(--text-muted);">جاري تحميل الأكواد...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة عرض وإدارة الأجهزة المسجلة -->
+    <div id="devicesModal" class="modal-overlay" onclick="closeModal('devicesModal')">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="devicesModalTitle">📱 الأجهزة المسجلة</h3>
+                <button type="button" class="btn btn-muted" onclick="closeModal('devicesModal')">✖ إغلاق</button>
+            </div>
+            <div id="devicesModalBody"></div>
+        </div>
+    </div>
+
+    <!-- نافذة استعادة النسخ الاحتياطية من Store_Backups المحمية -->
+    <div id="backupsModal" class="modal-overlay" onclick="closeModal('backupsModal')">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="backupsModalTitle">🔄 استعادة نسخة احتياطية محمية</h3>
+                <button type="button" class="btn btn-muted" onclick="closeModal('backupsModal')">✖ إغلاق</button>
+            </div>
+            <p style="font-size: 13px; color: var(--text-muted); margin-top: 0;">
+                النسخ محفوظة في المسار المعزول <code>Store_Backups/{storeId}/snapshots</code> ولا تتأثر بتصفير البيانات. عند الاستعادة يتم رفع <code>system_epoch</code> لإجبار كافة الأجهزة على التحديث الفوري.
+            </p>
+            <div id="backupsModalBody"></div>
+        </div>
+    </div>
+
+    <!-- نافذة التأكيد الصارم (كتابة كلمة "تأكيد") -->
+    <div id="destructiveModal" class="modal-overlay" onclick="cancelDestructiveConfirm()">
+        <div class="modal-card" style="max-width: 440px; border-color: var(--accent-red);" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="destructiveTitle" style="color: var(--accent-red);">🛑 تأكيد عملية حساسة</h3>
+                <button type="button" class="btn btn-muted" onclick="cancelDestructiveConfirm()">✖</button>
+            </div>
+            <p id="destructiveMessage" style="font-size: 14px; line-height: 1.6; margin-top: 0;"></p>
+            <p style="font-size: 13px; color: var(--accent-yellow); font-weight: bold;">اكتب كلمة (تأكيد) في الخانة التالية للمتابعة:</p>
+            <input type="text" id="destructiveInput" placeholder="تأكيد" style="text-align: center; margin-bottom: 14px;" autocomplete="off">
+            <div style="display: flex; gap: 10px;">
+                <button type="button" class="btn btn-danger" style="flex: 1;" onclick="submitDestructiveConfirm()">تنفيذ الإجراء</button>
+                <button type="button" class="btn btn-muted" style="flex: 1;" onclick="cancelDestructiveConfirm()">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastBar" class="toast-bar"></div>
+
+    <script>
+        // =========================================================================
+        // 1. الإعدادات المركزية (White-Label + Firebase V5)
+        // =========================================================================
+        const DASHBOARD_BRAND = Object.freeze({
+            title: 'مركز إدارة المتاجر والاشتراكات (V5 Commercial)',
+            cloudRoot: 'Seraj_SaaS_Stores',
+            backupsRoot: 'Store_Backups',
+            storesIndexRoot: 'Admin_Stores',
+            codesRoot: 'Activation_Codes'
+        });
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyASQurlODfgqRi812wwzcSGOTetYTaeUfQ",
+            authDomain: "serajled.firebaseapp.com",
+            databaseURL: "https://serajled-default-rtdb.firebaseio.com",
+            projectId: "serajled",
+            storageBucket: "serajled.firebasestorage.app",
+            messagingSenderId: "586272473412",
+            appId: "1:586272473412:web:a31487a74d9ea4ea96d711",
+            measurementId: "G-6Q7K2H0XJJ"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+
+        const auth = firebase.auth();
+        const dbAdmin = firebase.database();
+
+        const SYNCED_COLLECTIONS = [
+            'products',
+            'customers',
+            'suppliers',
+            'customer_vouchers',
+            'supplier_vouchers',
+            'sales_invoices',
+            'purchase_invoices',
+            'treasury_moves',
+            'smart_notes'
+        ];
+
+        let serverTimeOffset = 0;
+        let cachedStoresMap = {};
+        let cachedCodesMap = {};
+        let isListenersActive = false;
+        let destructiveResolver = null;
+
+        dbAdmin.ref('.info/serverTimeOffset').on('value', (snap) => {
+            serverTimeOffset = Number(snap.val() || 0);
+        });
+
+        function getServerNow() {
+            return Date.now() + (Number(serverTimeOffset) || 0);
+        }
+
+        // =========================================================================
+        // 2. أدوات التعقيم والتواريخ المحلية
+        // =========================================================================
+        function escapeHTML(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                "'": '&#39;',
+                '"': '&quot;'
+            }[tag]));
+        }
+
+        function normalizeSearch(str) {
+            return String(str || '')
+                .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+                .trim()
+                .replace(/[أإآ]/g, 'ا')
+                .replace(/ة/g, 'ه')
+                .replace(/ى/g, 'ي')
+                .toLowerCase();
+        }
+
+        function getLocalDateString(dateObj = new Date()) {
+            const d = dateObj instanceof Date ? dateObj : new Date(dateObj);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        function dateStrToExpiryTs(dateStr) {
+            if (!dateStr) return 0;
+            const m = String(dateStr).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (!m) return 0;
+            return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10), 23, 59, 59, 999).getTime();
+        }
+
+        function sanitizeKey(raw) {
+            return String(raw || '').trim().replace(/[.#$\[\]\/\\\s]+/g, '_');
+        }
+
+        function debounce(fn, delay = 180) {
+            let timer = null;
+            return function(...args) {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => fn.apply(this, args), delay);
+            };
+        }
+
+        function showToast(msg, isError = false) {
+            const el = document.getElementById('toastBar');
+            if (!el) return;
+            el.textContent = String(msg || '');
+            el.style.borderColor = isError ? 'var(--accent-red)' : 'var(--accent-green)';
+            el.style.display = 'block';
+            if (el._timer) clearTimeout(el._timer);
+            el._timer = setTimeout(() => { el.style.display = 'none'; }, 3800);
+        }
+
+        function openModal(id) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'flex';
+        }
+
+        function closeModal(id) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        }
+
+        function askDestructiveConfirm(title, message) {
+            return new Promise((resolve) => {
+                destructiveResolver = resolve;
+                document.getElementById('destructiveTitle').textContent = title;
+                document.getElementById('destructiveMessage').textContent = message;
+                const inp = document.getElementById('destructiveInput');
+                inp.value = '';
+                inp.style.borderColor = 'var(--border-soft)';
+                openModal('destructiveModal');
+                setTimeout(() => inp.focus(), 60);
+            });
+        }
+
+        function submitDestructiveConfirm() {
+            const inp = document.getElementById('destructiveInput');
+            const val = normalizeSearch(inp.value);
+            if (val !== 'تاكيد') {
+                inp.style.borderColor = 'var(--accent-red)';
+                inp.value = '';
+                inp.placeholder = '❌ يجب كتابة كلمة: تأكيد';
+                return;
+            }
+            closeModal('destructiveModal');
+            if (destructiveResolver) {
+                const fn = destructiveResolver;
+                destructiveResolver = null;
+                fn(true);
+            }
+        }
+
+        function cancelDestructiveConfirm() {
+            closeModal('destructiveModal');
+            if (destructiveResolver) {
+                const fn = destructiveResolver;
+                destructiveResolver = null;
+                fn(false);
+            }
+        }
+
+        // =========================================================================
+        // 3. مصادقة الإدارة عبر Firebase Auth + Admin Custom Claim
+        // =========================================================================
+        function showLoginError(msg) {
+            const el = document.getElementById('loginError');
+            if (!el) return;
+            if (!msg) {
+                el.style.display = 'none';
+                el.textContent = '';
+            } else {
+                el.textContent = msg;
+                el.style.display = 'block';
+            }
+        }
+
+        async function verifyAdminUser(user) {
+            if (!user) return false;
+            try {
+                const tokenResult = await user.getIdTokenResult(true);
+                const claims = tokenResult.claims || {};
+                const isAdmin = (
+                    claims.admin === true ||
+                    String(claims.role || '').toLowerCase() === 'admin' ||
+                    String(claims.role || '').toLowerCase() === 'super_admin'
+                );
+                return isAdmin;
+            } catch (err) {
+                console.error('Claim verification error:', err);
+                return false;
+            }
+        }
+
+        async function signInAdmin() {
+            const email = (document.getElementById('admin-email').value || '').trim();
+            const pass = document.getElementById('admin-pass').value || '';
+            const btn = document.getElementById('loginBtn');
+            showLoginError('');
+
+            if (!email || !pass) {
+                showLoginError('يرجى إدخال البريد الإلكتروني وكلمة المرور.');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '⏳ جاري التحقق من Admin Claim...';
+
+            try {
+                const cred = await auth.signInWithEmailAndPassword(email, pass);
+                const ok = await verifyAdminUser(cred.user);
+                if (!ok) {
+                    await auth.signOut();
+                    showLoginError('⛔ تم رفض الدخول: هذا الحساب لا يملك صلاحية الإدارة العليا (Admin Claim = true).');
+                }
+            } catch (err) {
+                showLoginError('❌ فشل تسجيل الدخول: ' + (err.message || 'تأكد من صحة البيانات.'));
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔐 تسجيل الدخول الآمن';
+            }
+        }
+
+        async function signOutAdmin() {
+            detachListeners();
+            await auth.signOut();
+            document.getElementById('dashboard-app').style.display = 'none';
+            document.getElementById('login-shield').style.display = 'flex';
+            document.getElementById('admin-pass').value = '';
+            showToast('تم تسجيل الخروج بأمان');
+        }
+
+        auth.onAuthStateChanged(async (user) => {
+            if (!user) {
+                detachListeners();
+                document.getElementById('dashboard-app').style.display = 'none';
+                document.getElementById('login-shield').style.display = 'flex';
+                return;
+            }
+            const ok = await verifyAdminUser(user);
+            if (!ok) {
+                await auth.signOut();
+                showLoginError('⛔ هذا الحساب لا يملك صلاحية Admin Claim.');
+                return;
+            }
+            document.getElementById('adminEmailBadge').textContent = `👤 ${user.email || 'Admin'}`;
+            document.getElementById('login-shield').style.display = 'none';
+            document.getElementById('dashboard-app').style.display = 'block';
+            setDefaultExpiryInput();
+            attachListeners();
+        });
+
+        function setDefaultExpiryInput() {
+            const inp = document.getElementById('new-store-expiry');
+            if (inp && !inp.value) {
+                const nextYear = new Date();
+                nextYear.setFullYear(nextYear.getFullYear() + 1);
+                inp.value = getLocalDateString(nextYear);
+            }
+        }
+
+        function switchTab(tabName) {
+            document.getElementById('tab-stores').classList.toggle('active', tabName === 'stores');
+            document.getElementById('tab-codes').classList.toggle('active', tabName === 'codes');
+            document.getElementById('tabBtnStores').classList.toggle('active', tabName === 'stores');
+            document.getElementById('tabBtnCodes').classList.toggle('active', tabName === 'codes');
+        }
+
+        function onNewPlanChanged() {
+            const plan = document.getElementById('new-store-plan').value;
+            const devInp = document.getElementById('new-store-devices');
+            if (plan === 'offline_single') {
+                devInp.value = 1;
+                devInp.readOnly = true;
+            } else {
+                devInp.readOnly = false;
+                if (parseInt(devInp.value, 10) <= 1) devInp.value = (plan === 'vip' ? 5 : 3);
+            }
+        }
+
+        // =========================================================================
+        // 4. الاستماع المباشر لفهرس المتاجر وأكواد الأوفلاين
+        // =========================================================================
+        function attachListeners() {
+            if (isListenersActive) return;
+            isListenersActive = true;
+
+            dbAdmin.ref(DASHBOARD_BRAND.storesIndexRoot).on('value', (snap) => {
+                cachedStoresMap = snap.exists() ? (snap.val() || {}) : {};
+                updateKPIs();
+                renderStoresTable();
+            }, (err) => {
+                showToast('خطأ في قراءة المتاجر: ' + err.message, true);
+            });
+
+            dbAdmin.ref(DASHBOARD_BRAND.codesRoot).on('value', (snap) => {
+                cachedCodesMap = snap.exists() ? (snap.val() || {}) : {};
+                updateKPIs();
+                renderCodesTable();
+            }, (err) => {
+                showToast('خطأ في قراءة أكواد التفعيل: ' + err.message, true);
+            });
+        }
+
+        function detachListeners() {
+            isListenersActive = false;
+            dbAdmin.ref(DASHBOARD_BRAND.storesIndexRoot).off();
+            dbAdmin.ref(DASHBOARD_BRAND.codesRoot).off();
+        }
+
+        function updateKPIs() {
+            const now = getServerNow();
+            const stores = Object.values(cachedStoresMap || {});
+            let active = 0, inactive = 0, offline = 0;
+
+            stores.forEach(st => {
+                if (!st) return;
+                const isExpired = st.plan !== 'offline_single' && Number(st.expiry_ts || 0) > 0 && now > Number(st.expiry_ts);
+                if (st.plan === 'offline_single') offline++;
+                if (st.status === 'active' && !isExpired) active++;
+                else inactive++;
+            });
+
+            const codes = Object.values(cachedCodesMap || {});
+            const unusedCodes = codes.filter(c => c && !c.isUsed).length;
+
+            document.getElementById('kpiTotalStores').textContent = String(stores.length);
+            document.getElementById('kpiActiveStores').textContent = String(active);
+            document.getElementById('kpiInactiveStores').textContent = String(inactive);
+            document.getElementById('kpiOfflineStores').textContent = String(offline);
+            document.getElementById('kpiUnusedCodes').textContent = String(unusedCodes);
+        }
+
+        // =========================================================================
+        // 5. إنشاء وتعديل المتاجر (مزامنة Admin_Stores + Seraj_SaaS_Stores/{id}/meta)
+        // =========================================================================
+        async function createNewClient() {
+            const rawId = document.getElementById('new-store-id').value;
+            const storeId = sanitizeKey(rawId);
+            const storeName = (document.getElementById('new-store-name').value || '').trim();
+            const ownerEmail = (document.getElementById('new-store-email').value || '').trim();
+            const ownerPhone = (document.getElementById('new-store-phone').value || '').trim();
+            const plan = document.getElementById('new-store-plan').value;
+            const maxDevices = plan === 'offline_single' ? 1 : Math.max(1, parseInt(document.getElementById('new-store-devices').value, 10) || 1);
+            const expiryDate = document.getElementById('new-store-expiry').value || '2030-12-31';
+            const expiryTs = plan === 'offline_single' ? 0 : dateStrToExpiryTs(expiryDate);
+
+            if (!storeId || storeId.toLowerCase() === 'demostore') {
+                return showToast('يرجى إدخال كود محل إنجليزي صالح (ممنوع استخدام DemoStore).', true);
+            }
+            if (!storeName) {
+                return showToast('يرجى إدخال اسم المحل / العميل.', true);
+            }
+            if (cachedStoresMap[storeId]) {
+                return showToast('كود المحل مستخدم بالفعل، اختر كوداً آخر.', true);
+            }
+
+            const now = getServerNow();
+            const metaPayload = {
+                storeId: storeId,
+                store_name: storeName,
+                owner_email: ownerEmail,
+                owner_phone: ownerPhone,
+                plan: plan,
+                max_devices: maxDevices,
+                expiry_date: plan === 'offline_single' ? 'دائم (أوفلاين)' : expiryDate,
+                expiry_ts: expiryTs,
+                status: 'active',
+                system_epoch: now,
+                created_at: now,
+                updated_at: now
+            };
+
+            const updates = {};
+            updates[`${DASHBOARD_BRAND.storesIndexRoot}/${storeId}`] = metaPayload;
+            updates[`${DASHBOARD_BRAND.cloudRoot}/${storeId}/meta`] = metaPayload;
+
+            try {
+                await dbAdmin.ref().update(updates);
+                document.getElementById('new-store-id').value = '';
+                document.getElementById('new-store-name').value = '';
+                document.getElementById('new-store-email').value = '';
+                document.getElementById('new-store-phone').value = '';
+                showToast(`✅ تم إنشاء المحل (${storeId}) بنجاح!`);
+            } catch (err) {
+                showToast('❌ خطأ أثناء الإنشاء: ' + err.message, true);
+            }
+        }
+
+        async function updateStoreMetaField(storeId, patchObj) {
+            if (!storeId || !patchObj) return;
+            const now = getServerNow();
+            const fullPatch = { ...patchObj, updated_at: now };
+            const updates = {};
+            Object.keys(fullPatch).forEach(k => {
+                updates[`${DASHBOARD_BRAND.storesIndexRoot}/${storeId}/${k}`] = fullPatch[k];
+                updates[`${DASHBOARD_BRAND.cloudRoot}/${storeId}/meta/${k}`] = fullPatch[k];
+            });
+            try {
+                await dbAdmin.ref().update(updates);
+                showToast(`✅ تم تحديث بيانات المحل (${storeId})`);
+            } catch (err) {
+                showToast('❌ فشل التحديث: ' + err.message, true);
+            }
+        }
+
+        function handlePlanChange(storeId, newPlan) {
+            const patch = { plan: newPlan };
+            if (newPlan === 'offline_single') {
+                patch.max_devices = 1;
+                patch.expiry_ts = 0;
+                patch.expiry_date = 'دائم (أوفلاين)';
+            } else {
+                const existing = cachedStoresMap[storeId] || {};
+                const nextDate = (existing.expiry_date && /^\d{4}-\d{2}-\d{2}$/.test(existing.expiry_date))
+                    ? existing.expiry_date
+                    : getLocalDateString(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000));
+                patch.expiry_date = nextDate;
+                patch.expiry_ts = dateStrToExpiryTs(nextDate);
+            }
+            updateStoreMetaField(storeId, patch);
+        }
+
+        function handleMaxDevicesChange(storeId, val) {
+            const count = Math.max(1, parseInt(val, 10) || 1);
+            updateStoreMetaField(storeId, { max_devices: count });
+        }
+
+        function handleExpiryChange(storeId, dateStr) {
+            if (!dateStr) return;
+            const ts = dateStrToExpiryTs(dateStr);
+            if (!ts) return showToast('تاريخ غير صالح', true);
+            updateStoreMetaField(storeId, { expiry_date: dateStr, expiry_ts: ts });
+        }
+
+        function handleToggleStatus(storeId, nextStatus) {
+            updateStoreMetaField(storeId, { status: nextStatus });
+        }
+
+        // =========================================================================
+        // 6. عرض جدول المتاجر (join('') + debounce + escapeHTML)
+        // =========================================================================
+        const debouncedRenderStores = debounce(() => renderStoresTable(), 160);
+
+        function renderStoresTable() {
+            const tbody = document.getElementById('clients-table-body');
+            if (!tbody) return;
+
+            const q = normalizeSearch(document.getElementById('storeSearchInput')?.value || '');
+            const planFilter = document.getElementById('planFilterSelect')?.value || 'all';
+            const statusFilter = document.getElementById('statusFilterSelect')?.value || 'all';
+            const now = getServerNow();
+
+            const list = Object.keys(cachedStoresMap || {}).map(id => ({
+                storeId: id,
+                ...(cachedStoresMap[id] || {})
+            })).filter(st => {
+                if (planFilter !== 'all' && st.plan !== planFilter) return false;
+                const isExpired = st.plan !== 'offline_single' && Number(st.expiry_ts || 0) > 0 && now > Number(st.expiry_ts);
+                if (statusFilter === 'active' && (st.status !== 'active' || isExpired)) return false;
+                if (statusFilter === 'suspended' && st.status !== 'suspended') return false;
+                if (statusFilter === 'expired' && !isExpired) return false;
+                if (q) {
+                    const hay = normalizeSearch(`${st.storeId} ${st.store_name || ''} ${st.owner_email || ''} ${st.owner_phone || ''}`);
+                    if (!hay.includes(q)) return false;
+                }
+                return true;
+            }).sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0));
+
+            if (list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:var(--text-muted);">لا توجد متاجر مطابقة لفلتر البحث</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = list.map(st => {
+                const sid = escapeHTML(st.storeId);
+                const plan = st.plan || 'pro';
+                const isOffline = plan === 'offline_single';
+                const expiryTs = Number(st.expiry_ts || 0);
+                const isExpired = !isOffline && expiryTs > 0 && now > expiryTs;
+
+                let statusBadge = `<span class="badge badge-active">نشط</span>`;
+                if (st.status !== 'active') statusBadge = `<span class="badge badge-suspended">موقوف</span>`;
+                else if (isExpired) statusBadge = `<span class="badge badge-expired">منتهي</span>`;
+
+                const planBadgeClass = plan === 'vip' ? 'badge-plan-vip' : (plan === 'offline_single' ? 'badge-plan-offline' : 'badge-plan-pro');
+                const toggleBtn = st.status === 'active'
+                    ? `<button type="button" class="btn btn-warning" onclick="handleToggleStatus('${sid}', 'suspended')">⏸️ إيقاف</button>`
+                    : `<button type="button" class="btn btn-primary" onclick="handleToggleStatus('${sid}', 'active')">▶️ تفعيل</button>`;
+
+                const expiryInputHtml = isOffline
+                    ? `<span class="badge badge-plan-offline">ترخيص دائم (أوفلاين)</span>`
+                    : `<input type="date" class="inline-input" dir="ltr" value="${escapeHTML(/^\d{4}-\d{2}-\d{2}$/.test(st.expiry_date || '') ? st.expiry_date : '')}" onchange="handleExpiryChange('${sid}', this.value)">
+                       <span class="cell-sub" dir="ltr">ts: ${expiryTs || 0}</span>`;
+
+                return `
+                    <tr>
+                        <td>
+                            <strong style="color: var(--accent-cyan); font-size: 14px;" dir="ltr">${sid}</strong>
+                            <span class="cell-sub" style="color: var(--text-main); font-size: 13px;">${escapeHTML(st.store_name || '---')}</span>
+                            ${st.owner_email ? `<span class="cell-sub" dir="ltr">📧 ${escapeHTML(st.owner_email)}</span>` : ''}
+                            ${st.owner_phone ? `<span class="cell-sub" dir="ltr">📞 ${escapeHTML(st.owner_phone)}</span>` : ''}
+                        </td>
+                        <td>
+                            <div style="margin-bottom: 6px;"><span class="badge ${planBadgeClass}">${escapeHTML(plan)}</span></div>
+                            <select class="inline-input" onchange="handlePlanChange('${sid}', this.value)">
+                                <option value="offline_single" ${plan === 'offline_single' ? 'selected' : ''}>offline_single (أوفلاين)</option>
+                                <option value="pro" ${plan === 'pro' ? 'selected' : ''}>pro (سحابي)</option>
+                                <option value="vip" ${plan === 'vip' ? 'selected' : ''}>vip (سحابي + AI)</option>
+                            </select>
+                        </td>
+                        <td style="width: 110px;">
+                            <input type="number" class="inline-input" style="text-align:center;" dir="ltr" min="1" max="50" value="${Number(st.max_devices || 1)}" ${isOffline ? 'disabled' : ''} onchange="handleMaxDevicesChange('${sid}', this.value)">
+                        </td>
+                        <td style="width: 170px;">${expiryInputHtml}</td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <div class="actions-wrap">
+                                ${toggleBtn}
+                                <button type="button" class="btn btn-info" onclick="openDevicesModal('${sid}')">📱 الأجهزة</button>
+                                <button type="button" class="btn btn-purple" onclick="openBackupsModal('${sid}')">🔄 استعادة</button>
+                                <button type="button" class="btn btn-danger" onclick="wipeStoreDataSafe('${sid}')">🧹 تصفير الداتا</button>
+                                <button type="button" class="btn btn-muted" onclick="deleteStoreRecord('${sid}')">🗑️ حذف</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // =========================================================================
+        // 7. إدارة الأجهزة المسجلة للمحل
+        // =========================================================================
+        async function openDevicesModal(storeId) {
+            document.getElementById('devicesModalTitle').textContent = `📱 الأجهزة المسجلة — ${storeId}`;
+            const body = document.getElementById('devicesModalBody');
+            body.innerHTML = `<div style="text-align:center; padding:18px; color:var(--text-muted);">جاري قراءة الأجهزة...</div>`;
+            openModal('devicesModal');
+
+            try {
+                const snap = await dbAdmin.ref(`${DASHBOARD_BRAND.cloudRoot}/${storeId}/meta/devices`).once('value');
+                const devicesMap = snap.exists() ? (snap.val() || {}) : {};
+                const keys = Object.keys(devicesMap);
+
+                if (keys.length === 0) {
+                    body.innerHTML = `<div style="text-align:center; padding:18px; color:var(--text-muted);">لا توجد أجهزة مسجلة لهذا المحل حتى الآن.</div>`;
+                    return;
+                }
+
+                body.innerHTML = keys.map(devId => {
+                    const d = devicesMap[devId] || {};
+                    const seenStr = d.lastSeen ? new Date(Number(d.lastSeen)).toLocaleString('ar-EG') : '---';
+                    return `
+                        <div class="modal-list-item">
+                            <div>
+                                <div><strong>${escapeHTML(d.name || 'جهاز')}</strong> (${escapeHTML(d.role || 'owner')} | بادئة: ${escapeHTML(d.prefix || 'A')})</div>
+                                <span class="cell-sub" dir="ltr">ID: ${escapeHTML(devId)}</span>
+                                <span class="cell-sub">آخر ظهور: ${escapeHTML(seenStr)}</span>
+                            </div>
+                            <button type="button" class="btn btn-danger" onclick="removeStoreDevice('${escapeHTML(storeId)}', '${escapeHTML(devId)}')">❌ إزالة</button>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                body.innerHTML = `<div style="color:var(--accent-red);">خطأ: ${escapeHTML(err.message)}</div>`;
+            }
+        }
+
+        async function removeStoreDevice(storeId, devId) {
+            try {
+                await dbAdmin.ref(`${DASHBOARD_BRAND.cloudRoot}/${storeId}/meta/devices/${devId}`).remove();
+                showToast('✅ تم فك ارتباط الجهاز بنجاح');
+                openDevicesModal(storeId);
+            } catch (err) {
+                showToast('❌ تعذر إزالة الجهاز: ' + err.message, true);
+            }
+        }
+
+        // =========================================================================
+        // 8. تصفير بيانات المحل مع الحفاظ الكامل على Store_Backups وmeta ورفع system_epoch
+        // =========================================================================
+        async function wipeStoreDataSafe(storeId) {
+            const confirmed = await askDestructiveConfirm(
+                `🧹 تصفير بيانات المحل (${storeId})`,
+                `سيتم مسح الأصناف والفواتير والعملاء والموردين وحركات الخزينة في المسار Seraj_SaaS_Stores/${storeId} مع الإبقاء على بيانات الاشتراك (meta) والإبقاء الكامل على النسخ الاحتياطية المحمية في Store_Backups/${storeId}، وإجبار الأجهزة على التحديث عبر system_epoch.`
+            );
+            if (!confirmed) return;
+
+            const now = getServerNow();
+            const wipePatch = {
+                vaults_v2: { main: 0, insta: 0, wallet: 0 },
+                archived_financial_summary: null,
+                'meta/system_epoch': now,
+                'meta/updated_at': now
+            };
+            SYNCED_COLLECTIONS.forEach(col => {
+                wipePatch[col] = null;
+            });
+
+            try {
+                await dbAdmin.ref(`${DASHBOARD_BRAND.cloudRoot}/${storeId}`).update(wipePatch);
+                await dbAdmin.ref(`${DASHBOARD_BRAND.storesIndexRoot}/${storeId}`).update({ system_epoch: now, updated_at: now });
+                showToast(`✅ تم تصفير بيانات (${storeId}) مع حماية Store_Backups ورفع system_epoch!`);
+            } catch (err) {
+                showToast('❌ فشل تصفير البيانات: ' + err.message, true);
+            }
+        }
+
+        // =========================================================================
+        // 9. استعادة نسخة احتياطية من Store_Backups/{storeId}/snapshots (آخر 7 لقطات)
+        // =========================================================================
+        async function openBackupsModal(storeId) {
+            document.getElementById('backupsModalTitle').textContent = `🔄 النسخ المحمية للمحل — ${storeId}`;
+            const body = document.getElementById('backupsModalBody');
+            body.innerHTML = `<div style="text-align:center; padding:18px; color:var(--text-muted);">جاري قراءة اللقطات المحمية من Store_Backups...</div>`;
+            openModal('backupsModal');
+
+            try {
+                const snap = await dbAdmin.ref(`${DASHBOARD_BRAND.backupsRoot}/${storeId}/snapshots`).once('value');
+                if (!snap.exists()) {
+                    body.innerHTML = `<div style="text-align:center; padding:18px; color:var(--accent-yellow);">⚠️ لا توجد لقطات نسخ احتياطي محفوظة لهذا المحل في Store_Backups حتى الآن.</div>`;
+                    return;
+                }
+                const snapshots = snap.val() || {};
+                const dates = Object.keys(snapshots).sort().reverse();
+
+                body.innerHTML = dates.map(dateKey => {
+                    const s = snapshots[dateKey] || {};
+                    const counts = s.counts || {};
+                    return `
+                        <div class="modal-list-item">
+                            <div>
+                                <strong style="color:var(--accent-green);" dir="ltr">📅 ${escapeHTML(dateKey)}</strong>
+                                <span class="cell-sub">أصناف: ${Number(counts.products || 0)} | مبيعات: ${Number(counts.sales || 0)} | مشتريات: ${Number(counts.purchases || 0)} | عملاء: ${Number(counts.customers || 0)}</span>
+                                <span class="cell-sub">الجهاز: ${escapeHTML(s.deviceName || '---')}</span>
+                            </div>
+                            <button type="button" class="btn btn-purple" onclick="restoreSnapshotToStore('${escapeHTML(storeId)}', '${escapeHTML(dateKey)}')">🔄 استعادة هذه اللقطة</button>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                body.innerHTML = `<div style="color:var(--accent-red);">خطأ في قراءة النسخ: ${escapeHTML(err.message)}</div>`;
+            }
+        }
+
+        async function restoreSnapshotToStore(storeId, dateKey) {
+            const confirmed = await askDestructiveConfirm(
+                `🔄 استعادة لقطة (${dateKey}) للمحل ${storeId}`,
+                'سيتم استبدال البيانات النشطة للمحل بهذه اللقطة المحفوظة وتحديث system_epoch لإجبار كافة الأجهزة المتصلة على سحب البيانات المستعادة.'
+            );
+            if (!confirmed) return;
+
+            try {
+                const snap = await dbAdmin.ref(`${DASHBOARD_BRAND.backupsRoot}/${storeId}/snapshots/${dateKey}`).once('value');
+                if (!snap.exists()) {
+                    return showToast('⚠️ لم يتم العثور على اللقطة المطلوبة!', true);
+                }
+
+                const rawBackup = snap.val() || {};
+                const dataMap = (rawBackup.data && typeof rawBackup.data === 'object') ? rawBackup.data : rawBackup;
+                const now = getServerNow();
+
+                const toCloudObjMap = (arrOrObj) => {
+                    const out = {};
+                    const items = Array.isArray(arrOrObj)
+                        ? arrOrObj
+                        : (arrOrObj && typeof arrOrObj === 'object' ? Object.values(arrOrObj) : []);
+                    items.forEach(item => {
+                        if (!item || typeof item !== 'object') return;
+                        const key = sanitizeKey(item._cloudKey || item.id);
+                        if (!key) return;
+                        out[key] = { ...item, _lastModified: now };
+                    });
+                    return out;
+                };
+
+                const restorePatch = {
+                    'meta/system_epoch': now,
+                    'meta/updated_at': now
+                };
+
+                SYNCED_COLLECTIONS.forEach(col => {
+                    const src = dataMap[`seraj_${col}`] !== undefined ? dataMap[`seraj_${col}`] : dataMap[col];
+                    restorePatch[col] = toCloudObjMap(src);
+                });
+
+                restorePatch.vaults_v2 = dataMap.seraj_vaults_v2 || dataMap.vaults_v2 || { main: 0, insta: 0, wallet: 0 };
+                if (dataMap.seraj_invoice_counters || dataMap.invoice_counters) {
+                    restorePatch.invoice_counters = dataMap.seraj_invoice_counters || dataMap.invoice_counters;
+                }
+                restorePatch.archived_financial_summary = dataMap.seraj_archived_financial_summary || dataMap.archived_financial_summary || null;
+
+                await dbAdmin.ref(`${DASHBOARD_BRAND.cloudRoot}/${storeId}`).update(restorePatch);
+                await dbAdmin.ref(`${DASHBOARD_BRAND.storesIndexRoot}/${storeId}`).update({ system_epoch: now, updated_at: now });
+                closeModal('backupsModal');
+                showToast(`✅ تمت استعادة لقطة (${dateKey}) للمحل (${storeId}) بنجاح!`);
+            } catch (err) {
+                showToast('❌ فشل الاستعادة: ' + err.message, true);
+            }
+        }
+
+        async function deleteStoreRecord(storeId) {
+            const confirmed = await askDestructiveConfirm(
+                `🗑️ حذف اشتراك المحل (${storeId})`,
+                `سيتم حذف المحل من فهرس المتاجر وإيقاف اشتراكه في Seraj_SaaS_Stores/${storeId}/meta (مع إبقاء Store_Backups/${storeId} محمية للأرشيف).`
+            );
+            if (!confirmed) return;
+
+            try {
+                const updates = {};
+                updates[`${DASHBOARD_BRAND.storesIndexRoot}/${storeId}`] = null;
+                updates[`${DASHBOARD_BRAND.cloudRoot}/${storeId}/meta/status`] = 'suspended';
+                updates[`${DASHBOARD_BRAND.cloudRoot}/${storeId}/meta/updated_at`] = getServerNow();
+                await dbAdmin.ref().update(updates);
+                showToast(`✅ تم حذف سجل المحل (${storeId}) وإيقافه.`);
+            } catch (err) {
+                showToast('❌ فشل الحذف: ' + err.message, true);
+            }
+        }
+
+        // =========================================================================
+        // 10. إدارة أكواد تفعيل باقة الأوفلاين (Activation_Codes)
+        // =========================================================================
+        function randomSegment(len = 4) {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let out = '';
+            for (let i = 0; i < len; i++) {
+                out += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return out;
+        }
+
+        async function generateActivationCode() {
+            const label = (document.getElementById('code-store-label').value || '').trim();
+            const customCode = sanitizeKey(document.getElementById('code-custom-val').value || '').toUpperCase();
+            const code = customCode || `OFF-${randomSegment(4)}-${randomSegment(4)}-${randomSegment(4)}`;
+
+            if (cachedCodesMap[code]) {
+                return showToast('هذا الكود موجود بالفعل!', true);
+            }
+
+            const payload = {
+                code: code,
+                plan: 'offline_single',
+                label: label || 'عميل أوفلاين',
+                isUsed: false,
+                boundDeviceId: '',
+                boundStoreId: '',
+                boundDeviceName: '',
+                createdAt: getServerNow(),
+                usedAt: 0
+            };
+
+            try {
+                await dbAdmin.ref(`${DASHBOARD_BRAND.codesRoot}/${code}`).set(payload);
+                document.getElementById('code-store-label').value = '';
+                document.getElementById('code-custom-val').value = '';
+                showToast(`✅ تم إصدار كود الأوفلاين: ${code}`);
+            } catch (err) {
+                showToast('❌ خطأ أثناء إصدار الكود: ' + err.message, true);
+            }
+        }
+
+        const debouncedRenderCodes = debounce(() => renderCodesTable(), 160);
+
+        function renderCodesTable() {
+            const tbody = document.getElementById('codes-table-body');
+            if (!tbody) return;
+
+            const q = normalizeSearch(document.getElementById('codeSearchInput')?.value || '');
+            const list = Object.keys(cachedCodesMap || {}).map(code => ({
+                code,
+                ...(cachedCodesMap[code] || {})
+            })).filter(c => {
+                if (!q) return true;
+                const hay = normalizeSearch(`${c.code} ${c.label || ''} ${c.boundStoreId || ''} ${c.boundDeviceId || ''} ${c.boundDeviceName || ''}`);
+                return hay.includes(q);
+            }).sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+
+            if (list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:var(--text-muted);">لا توجد أكواد تفعيل مطابقة</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = list.map(c => {
+                const safeCode = escapeHTML(c.code);
+                const statusBadge = c.isUsed
+                    ? `<span class="badge badge-expired">مستخدم ومقفل</span>`
+                    : `<span class="badge badge-active">متاح للتفعيل</span>`;
+                const boundInfo = c.isUsed
+                    ? `<div>المحل: <strong dir="ltr">${escapeHTML(c.boundStoreId || '---')}</strong></div>
+                       <span class="cell-sub" dir="ltr">Device: ${escapeHTML(c.boundDeviceId || '---')}</span>
+                       <span class="cell-sub">الاسم: ${escapeHTML(c.boundDeviceName || '---')}</span>`
+                    : `<span class="cell-sub">غير مرتبط بجهاز بعد</span>`;
+                const usedDateStr = c.usedAt ? new Date(Number(c.usedAt)).toLocaleString('ar-EG') : '---';
+
+                return `
+                    <tr>
+                        <td><strong style="color: var(--accent-yellow); font-family: monospace;" dir="ltr">${safeCode}</strong></td>
+                        <td>${escapeHTML(c.label || '---')}</td>
+                        <td>${statusBadge}</td>
+                        <td>${boundInfo}</td>
+                        <td>${escapeHTML(usedDateStr)}</td>
+                        <td>
+                            <div class="actions-wrap">
+                                <button type="button" class="btn btn-info" onclick="copyText('${safeCode}')">📋 نسخ</button>
+                                ${c.isUsed ? `<button type="button" class="btn btn-warning" onclick="unbindCodeDevice('${safeCode}')">🔓 فك الجهاز</button>` : ''}
+                                <button type="button" class="btn btn-danger" onclick="deleteActivationCode('${safeCode}')">🗑️ حذف</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function copyText(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => showToast('✅ تم نسخ الكود: ' + text)).catch(() => showToast('الكود: ' + text));
+            } else {
+                showToast('الكود: ' + text);
+            }
+        }
+
+        async function unbindCodeDevice(code) {
+            const ok = await askDestructiveConfirm(
+                `🔓 فك ارتباط كود (${code})`,
+                'سيتم تحرير الكود للسماح للعميل بإعادة تفعيله على جهاز جديد لمرة واحدة.'
+            );
+            if (!ok) return;
+            try {
+                await dbAdmin.ref(`${DASHBOARD_BRAND.codesRoot}/${code}`).update({
+                    isUsed: false,
+                    boundDeviceId: '',
+                    boundDeviceName: '',
+                    usedAt: 0
+                });
+                showToast(`✅ تم فك ارتباط الكود (${code}) بنجاح.`);
+            } catch (err) {
+                showToast('❌ خطأ: ' + err.message, true);
+            }
+        }
+
+        async function deleteActivationCode(code) {
+            const ok = await askDestructiveConfirm(
+                `🗑️ حذف الكود (${code})`,
+                'هل تريد حذف كود التفعيل هذا نهائياً من قاعدة البيانات؟'
+            );
+            if (!ok) return;
+            try {
+                await dbAdmin.ref(`${DASHBOARD_BRAND.codesRoot}/${code}`).remove();
+                showToast(`✅ تم حذف الكود (${code})`);
+            } catch (err) {
+                showToast('❌ خطأ: ' + err.message, true);
+            }
+        }
+
+        // دعم مفتاح Enter في شاشة تسجيل الدخول
+        document.getElementById('admin-pass').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') signInAdmin();
+        });
+    </script>
+</body>
+</html>

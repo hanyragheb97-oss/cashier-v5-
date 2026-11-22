@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>جرد المخزن مجمل</title>
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b0d1e">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="stylesheet" href="style.css">
+
+    <!-- المكتبات المحلية للعمل أوفلاين 100% -->
+    <script src="./libs/xlsx.full.min.js" defer></script>
+    <script src="./libs/html2pdf.bundle.min.js" defer></script>
+
+    <style>
+        .report-main-wrap {
+            max-width: 860px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 12px 12px 95px;
+            box-sizing: border-box;
+        }
+
+        .inventory-summary-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .inv-stat-card {
+            background-color: var(--card-bg-alt);
+            border: 2px solid var(--neon-border);
+            border-radius: 14px;
+            padding: 10px 12px;
+            text-align: center;
+            box-shadow: 0 0 12px var(--neon-glow);
+        }
+
+        .inv-stat-card.positive-card {
+            border-color: var(--accent-green);
+        }
+
+        .inv-stat-card.deficit-card {
+            border-color: var(--accent-red);
+        }
+
+        .inv-stat-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .inv-stat-val {
+            font-size: 17px;
+            font-weight: bold;
+            direction: ltr;
+        }
+
+        .inv-stat-sub {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+            font-weight: bold;
+        }
+
+        .value-pill {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 13px;
+            margin-top: 5px;
+            border: 1.5px solid var(--accent-green);
+            color: var(--accent-green);
+            background-color: var(--surface-subtle);
+            direction: ltr;
+        }
+
+        .value-pill.deficit {
+            border-color: var(--accent-red);
+            color: var(--accent-red);
+        }
+
+        .report-total-footer td {
+            background-color: var(--table-header-bg);
+            border-top: 2px solid var(--neon-border);
+            padding: 14px 10px;
+            line-height: 1.9;
+            font-size: 15px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body class="page-records" onclick="closeAllMenus()">
+
+    <div class="header header-records">
+        <span>جرد المخزن مجمل (بسعر البيع)</span>
+    </div>
+
+    <div class="report-main-wrap">
+        <div class="search-container">
+            <input type="text" id="searchInput" class="search-input seraj-search-input" placeholder="ابحث باسم المنتج أو الكود أو التصنيف..." oninput="debouncedRender()" onclick="event.stopPropagation()" autocomplete="off">
+        </div>
+
+        <!-- فصل قيمة الأصول الموجبة عن العجز السالب -->
+        <div class="inventory-summary-grid">
+            <div class="inv-stat-card positive-card">
+                <div class="inv-stat-label">قيمة الأصول الموجبة (بيع)</div>
+                <div class="inv-stat-val val-green"><span id="positiveAssetsSell">0.00</span> ج</div>
+                <div class="inv-stat-sub">الوحدات الموجبة: <span id="positiveUnitsCount" dir="ltr">0</span></div>
+            </div>
+            <div class="inv-stat-card deficit-card">
+                <div class="inv-stat-label">قيمة العجز السالب (بيع)</div>
+                <div class="inv-stat-val val-red"><span id="negativeDeficitSell">0.00</span> ج</div>
+                <div class="inv-stat-sub">وحدات العجز: <span id="negativeUnitsCount" dir="ltr">0</span></div>
+            </div>
+        </div>
+
+        <div class="table-wrapper" id="pdf-wrapper" style="max-height: none;">
+            <table class="seraj-table">
+                <thead>
+                    <tr>
+                        <th style="width: 46%; text-align: right;">اسم المنتج</th>
+                        <th style="width: 22%;">رصيد المخزن</th>
+                        <th style="width: 32%;">سعر البيع / القيمة</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+                <tfoot>
+                    <tr class="report-total-footer">
+                        <td colspan="3">
+                            قيمة الأصول الموجبة (بيع): <span id="footerPositiveSell" class="val-green" dir="ltr">0.00</span> ج<br>
+                            قيمة العجز السالب (بيع): <span id="footerDeficitSell" class="val-red" dir="ltr">0.00</span> ج<br>
+                            صافي القيمة البيعية للمخزن: <span id="grandInventoryTotal" class="val-yellow" style="font-size: 18px;" dir="ltr">0.00</span> ج
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- الشريط السفلي الموحد -->
+    <div class="unified-bottom-bar" onclick="event.stopPropagation()">
+        <button type="button" class="header-back-btn" onclick="handleSmartBack()">
+            <span class="arrow">⬅</span>
+            <span class="text">BACK</span>
+        </button>
+
+        <div class="bottom-capsules">
+            <div class="capsule print-btn" onclick="togglePrintOptions(event)">
+                🖨️ خيارات الطباعة والتصدير
+                <div class="dropdown-menu" id="floatingPrintMenu">
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('thermal')">🧾 طباعة حرارية (80mm)</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('a4')">🖨️ طباعة ورقة (A4)</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('pdf_export')">📄 مشاركة / تصدير PDF</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('excel_export')">📊 تصدير Excel</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="print_manager.js"></script>
+
+    <script>
+        let lastSummaryRows = [];
+        let lastStats = {
+            positiveSell: 0,
+            positiveQty: 0,
+            deficitSell: 0,
+            deficitQty: 0,
+            netSell: 0
+        };
+
+        const safeHTML = (v) => window.Utils.sanitizeHTML(v);
+        const round2 = (v) => window.Utils.round2(v);
+        const round4 = (v) => window.Utils.round4(v);
+
+        function updatePageBranding() {
+            const brand = window.PrintManager ? window.PrintManager.getShopBranding() : { shopName: window.APP_BRAND_CONFIG.appName };
+            document.title = `جرد المخزن مجمل - ${brand.shopName}`;
+        }
+
+        function handleSmartBack() {
+            localStorage.setItem('seraj_active_tab', 'المخزن');
+            window.location.href = 'smart_accountant.html';
+        }
+
+        function closeAllMenus() {
+            const prnt = document.getElementById('floatingPrintMenu');
+            if (prnt) prnt.style.display = 'none';
+        }
+
+        function togglePrintOptions(e) {
+            if (e) e.stopPropagation();
+            const m = document.getElementById('floatingPrintMenu');
+            const isVisible = m && m.style.display === 'block';
+            closeAllMenus();
+            if (m && !isVisible) m.style.display = 'block';
+        }
+
+        function formatQty(val) {
+            return Number(round4(val).toFixed(2)).toString();
+        }
+
+        // قراءة الرصيد المجمع وسعر البيع وفق أولوية الدستور (p.price أولاً ثم أحدث دفعة ثم _lastValidPrice)
+        function getProductStock(p) {
+            if (Array.isArray(p.lots) && p.lots.length > 0) {
+                return round4(p.lots.reduce((sum, l) => sum + (parseFloat(l?.stock) || 0), 0));
+            }
+            return round4(p.stock ?? p.qty ?? 0);
+        }
+
+        function getProductSellPrice(p) {
+            const direct = parseFloat(p.price ?? p.sellPrice);
+            if (!isNaN(direct) && direct > 0) return round2(direct);
+            if (Array.isArray(p.lots) && p.lots.length > 0) {
+                for (let i = p.lots.length - 1; i >= 0; i--) {
+                    const lp = parseFloat(p.lots[i]?.price ?? p.lots[i]?.sellPrice);
+                    if (!isNaN(lp) && lp > 0) return round2(lp);
+                }
+            }
+            return round2(p._lastValidPrice || 0);
+        }
+
+        const debouncedRender = window.Utils.debounce(function() {
+            renderTable();
+        }, 160);
+
+        function renderTable() {
+            const normQ = window.Utils.normalizeName(document.getElementById('searchInput')?.value || '');
+            const productsDB = (DB.getProducts(false) || []).slice();
+            const tbody = document.getElementById('tableBody');
+            if (!tbody) return;
+
+            productsDB.sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'ar'));
+
+            const rows = [];
+            let positiveSell = 0;
+            let positiveQty = 0;
+            let deficitSell = 0;
+            let deficitQty = 0;
+
+            productsDB.forEach(product => {
+                if (!product || product.isArchived || product.isDeleted) return;
+                const prodName = String(product.name || '').trim();
+                if (!prodName) return;
+
+                const prodBarcode = String(product.barcode || '').trim();
+                const prodCategory = String(product.category || 'عام').trim();
+
+                if (normQ) {
+                    const hay = `${window.Utils.normalizeName(prodName)} ${window.Utils.normalizeName(prodBarcode)} ${window.Utils.normalizeName(prodCategory)}`;
+                    if (!hay.includes(normQ)) return;
+                }
+
+                const currentQty = getProductStock(product);
+                if (!window.Utils.isNonZeroStock(currentQty)) return;
+
+                const sellPrice = getProductSellPrice(product);
+                const totalValue = round2(currentQty * sellPrice);
+
+                if (currentQty > 0) {
+                    positiveQty = round4(positiveQty + currentQty);
+                    positiveSell = round2(positiveSell + totalValue);
+                } else {
+                    const absQ = Math.abs(currentQty);
+                    deficitQty = round4(deficitQty + absQ);
+                    deficitSell = round2(deficitSell + round2(absQ * sellPrice));
+                }
+
+                rows.push({
+                    name: prodName,
+                    barcode: prodBarcode,
+                    category: prodCategory,
+                    qty: currentQty,
+                    sellPrice: sellPrice,
+                    totalValue: totalValue,
+                    isDeficit: currentQty < 0
+                });
+            });
+
+            const netSell = round2(positiveSell - deficitSell);
+            lastSummaryRows = rows;
+            lastStats = { positiveSell, positiveQty, deficitSell, deficitQty, netSell };
+
+            document.getElementById('positiveAssetsSell').textContent = positiveSell.toFixed(2);
+            document.getElementById('positiveUnitsCount').textContent = formatQty(positiveQty);
+            document.getElementById('negativeDeficitSell').textContent = deficitSell.toFixed(2);
+            document.getElementById('negativeUnitsCount').textContent = formatQty(deficitQty);
+
+            document.getElementById('footerPositiveSell').textContent = positiveSell.toFixed(2);
+            document.getElementById('footerDeficitSell').textContent = deficitSell.toFixed(2);
+            document.getElementById('grandInventoryTotal').textContent = netSell.toFixed(2);
+
+            if (rows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" style="padding: 24px; color: var(--text-muted);">لا توجد منتجات برصيد في المخزن مطابقة للبحث</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = rows.map(item => `
+                <tr>
+                    <td style="text-align: right;">
+                        <div>${safeHTML(item.name)}</div>
+                        ${(item.barcode || item.category !== 'عام') ? `<span class="cell-meta">${item.category !== 'عام' ? safeHTML(item.category) : ''}${item.barcode ? `${item.category !== 'عام' ? ' | ' : ''}كود: <span dir="ltr">${safeHTML(item.barcode)}</span>` : ''}</span>` : ''}
+                    </td>
+                    <td class="${item.isDeficit ? 'val-red' : 'val-green'}" dir="ltr">${safeHTML(formatQty(item.qty))}</td>
+                    <td>
+                        <div dir="ltr">${item.sellPrice.toFixed(2)}</div>
+                        <div class="value-pill ${item.isDeficit ? 'deficit' : ''}">${item.totalValue.toFixed(2)} ج</div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // =========================================================================
+        // الطباعة (فصل 80mm عن A4) و PDF (downloadRealPDF) و Excel (الباركود كـ String)
+        // =========================================================================
+        function _buildA4ReportHTML() {
+            const brand = window.PrintManager.getShopBranding();
+            const todayStr = window.Utils.getLocalDateString();
+            const rowsHtml = lastSummaryRows.map((item, idx) => `
+                <tr>
+                    <td>${idx + 1}</td>
+                    <td style="text-align: right;">${safeHTML(item.name)}</td>
+                    <td dir="ltr">${safeHTML(item.barcode || '---')}</td>
+                    <td>${safeHTML(item.category)}</td>
+                    <td dir="ltr" class="${item.isDeficit ? 'val-red' : ''}">${safeHTML(formatQty(item.qty))}</td>
+                    <td dir="ltr">${item.sellPrice.toFixed(2)}</td>
+                    <td dir="ltr" class="${item.isDeficit ? 'val-red' : 'val-green'}">${item.totalValue.toFixed(2)}</td>
+                </tr>
+            `).join('');
+
+            return `
+                <div dir="rtl" style="background:#fff; color:#000; padding:10px; font-family:Tahoma, Arial, sans-serif;">
+                    <div style="text-align:center; border-bottom:3px solid #000; padding-bottom:10px; margin-bottom:14px;">
+                        <h1 style="margin:0; font-size:24px;">${safeHTML(brand.shopName)} — جرد المخزن مجمل (سعر البيع)</h1>
+                        ${brand.shopPhone ? `<div style="font-size:13px; margin-top:3px;">ت: ${safeHTML(brand.shopPhone)}</div>` : ''}
+                        <div style="font-size:14px; font-weight:bold; margin-top:4px;">التاريخ: ${safeHTML(todayStr)} | عدد الأصناف: ${lastSummaryRows.length}</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>م</th>
+                                <th style="text-align:right;">اسم المنتج</th>
+                                <th>الكود</th>
+                                <th>التصنيف</th>
+                                <th>الرصيد</th>
+                                <th>سعر البيع</th>
+                                <th>إجمالي القيمة</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                    <div style="width:100%; max-width:400px; margin-right:auto; border:2px solid #000; border-radius:6px; padding:10px; margin-top:14px; background:#f8fafc;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>قيمة الأصول الموجبة (${safeHTML(formatQty(lastStats.positiveQty))} وحدة):</span><strong class="val-green">${lastStats.positiveSell.toFixed(2)} ج</strong></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>قيمة العجز السالب (${safeHTML(formatQty(lastStats.deficitQty))} وحدة):</span><strong class="val-red">${lastStats.deficitSell.toFixed(2)} ج</strong></div>
+                        <div style="display:flex; justify-content:space-between; border-top:1px solid #000; padding-top:6px;"><span>صافي القيمة البيعية للمخزن:</span><strong>${lastStats.netSell.toFixed(2)} ج</strong></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function printThermalReport() {
+            if (lastSummaryRows.length === 0) return SerajAlert('لا توجد بيانات للطباعة!', 'info');
+            const brand = window.PrintManager.getShopBranding();
+            const rowsHtml = lastSummaryRows.map(item => `
+                <tr>
+                    <td style="text-align:right; padding:4px 2px; border-bottom:1px dotted #333;">${safeHTML(item.name)}</td>
+                    <td style="text-align:center; padding:4px 2px; border-bottom:1px dotted #333;" dir="ltr">${safeHTML(formatQty(item.qty))}</td>
+                    <td style="text-align:left; padding:4px 2px; border-bottom:1px dotted #333; font-weight:bold;" dir="ltr">${item.totalValue.toFixed(2)}</td>
+                </tr>
+            `).join('');
+
+            const docHtml = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>جرد المخزن مجمل</title><style>@page{size:80mm auto;margin:0;}body{margin:0;padding:4mm 2mm;width:74mm;box-sizing:border-box;font-family:Tahoma,Arial,sans-serif;font-size:12px;color:#000;background:#fff;}</style></head><body>
+                <div style="text-align:center; border-bottom:2px dashed #000; padding-bottom:6px; margin-bottom:8px;">
+                    <div style="font-size:17px; font-weight:bold;">${safeHTML(brand.shopName)}</div>
+                    <div style="font-weight:bold;">جرد المخزن مجمل (سعر البيع)</div>
+                    <div>${safeHTML(window.Utils.getLocalDateString())}</div>
+                </div>
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead><tr style="border-bottom:1px solid #000;"><th style="text-align:right;">المنتج</th><th>الكمية</th><th style="text-align:left;">القيمة</th></tr></thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+                <div style="border-top:2px dashed #000; margin-top:8px; padding-top:6px; font-weight:bold; line-height:1.6;">
+                    <div>الأصول الموجبة: ${lastStats.positiveSell.toFixed(2)} ج</div>
+                    <div>العجز السالب: ${lastStats.deficitSell.toFixed(2)} ج</div>
+                    <div style="font-size:14px;">صافي القيمة البيعية: ${lastStats.netSell.toFixed(2)} ج</div>
+                </div>
+                <div style="text-align:center; margin-top:10px; border-top:1px dashed #000; padding-top:6px;">${safeHTML(brand.footerNote)}</div>
+            </body></html>`;
+            window.PrintManager._printHtmlViaSafeIframe(docHtml);
+        }
+
+        function handlePrintAction(action) {
+            closeAllMenus();
+            if (lastSummaryRows.length === 0) return SerajAlert('لا توجد بيانات للطباعة أو التصدير!', 'info');
+
+            if (action === 'thermal') {
+                printThermalReport();
+            } else if (action === 'a4') {
+                window.PrintManager.printA4HTML(_buildA4ReportHTML(), 'جرد المخزن مجمل');
+            } else if (action === 'pdf_export') {
+                window.Utils.downloadRealPDF(_buildA4ReportHTML(), `Inventory_Summary_${window.Utils.getLocalDateString()}.pdf`);
+            } else if (action === 'excel_export') {
+                const excelData = [
+                    ['اسم المنتج', 'الكود', 'التصنيف', 'الرصيد بالمخزن', 'سعر البيع', 'إجمالي القيمة'],
+                    ...lastSummaryRows.map(item => [
+                        item.name,
+                        String(item.barcode || ''),
+                        item.category,
+                        Number(round4(item.qty).toFixed(2)),
+                        item.sellPrice,
+                        item.totalValue
+                    ]),
+                    [],
+                    ['قيمة الأصول الموجبة (بيع)', '', '', Number(round4(lastStats.positiveQty).toFixed(2)), '', lastStats.positiveSell],
+                    ['قيمة العجز السالب (بيع)', '', '', Number(round4(lastStats.deficitQty).toFixed(2)), '', lastStats.deficitSell],
+                    ['صافي القيمة البيعية للمخزن', '', '', '', '', lastStats.netSell]
+                ];
+                window.PrintManager.exportToExcel(excelData, `Inventory_Summary_${window.Utils.getLocalDateString()}`);
+            }
+        }
+
+        async function initPage() {
+            await window.SerajMegaDB.ready;
+            DB.applySavedTheme();
+            window.SerajAuth.applyRoleGuards();
+            updatePageBranding();
+            renderTable();
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initPage();
+        });
+
+        window.addEventListener('seraj:updated', (e) => {
+            const col = e && e.detail ? e.detail.collection : null;
+            if (!col || ['all', 'products', 'sales_invoices', 'purchase_invoices', 'store_settings'].includes(col)) {
+                updatePageBranding();
+                renderTable();
+            }
+        });
+
+        window.addEventListener('popstate', () => {
+            if (window.SerajUI._modalStack.length > 0) return;
+            handleSmartBack();
+        });
+    </script>
+</body>
+</html>

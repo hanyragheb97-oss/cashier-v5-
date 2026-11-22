@@ -1,0 +1,1761 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>حسابات العملاء</title>
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b0d1e">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="stylesheet" href="style.css">
+
+    <!-- المكتبات المحلية للعمل أوفلاين 100% -->
+    <script src="./libs/xlsx.full.min.js" defer></script>
+    <script src="./libs/html2pdf.bundle.min.js" defer></script>
+</head>
+<body class="page-records" onclick="closeAllMenus(event)">
+
+    <!-- الشاشة 1: قائمة العملاء الرئيسية -->
+    <div id="customers-list-view" class="view-section active-view">
+        <div class="header header-records">
+            <span id="mainPageTitle">العملاء</span>
+        </div>
+
+        <div class="main-container customers-container" style="padding-top: 10px;">
+            <div class="search-box">
+                <span style="margin-left: 8px; color: var(--neon-border); font-weight: bold;">≡</span>
+                <input type="text" id="customerSearch" placeholder="ابحث باسم العميل أو الموبايل واضغط Enter..." oninput="debouncedSearch()" onkeydown="handleSearchKey(event)" onclick="this.select()" autocomplete="off">
+            </div>
+
+            <div class="table-wrapper">
+                <table id="mainCustomersTable">
+                    <thead>
+                        <tr>
+                            <th onclick="sortCustomers('name')" style="cursor: pointer;">العميل ↕</th>
+                            <th onclick="sortCustomers('balance')" style="cursor: pointer;">الرصيد ↕</th>
+                            <th onclick="sortCustomers('date')" style="cursor: pointer;">آخر معاملة ↕</th>
+                        </tr>
+                    </thead>
+                    <tbody id="customersTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <button type="button" class="seraj-btn-add-floating" id="addBtn" onclick="openAddCustomerModal()" title="إضافة عميل جديد">➕</button>
+    </div>
+
+    <!-- الشاشة 2: تفاصيل حساب العميل -->
+    <div id="customer-account-view" class="view-section">
+        <div class="header header-records">
+            <span id="accountHeaderTitle">حسابات العميل</span>
+        </div>
+
+        <div class="main-container" style="padding-top: 8px;">
+            <div class="summary-box">
+                <div class="summary-grid-2col">
+                    <div>
+                        <div class="text-muted">الرصيد الحالي</div>
+                        <div class="val-green" id="summaryCurrentBalance" dir="ltr">0.00</div>
+                    </div>
+                    <div>
+                        <div class="text-muted">فواتير آجلة</div>
+                        <div class="val-red" id="summaryDeferredInvoices" dir="ltr">0.00</div>
+                    </div>
+                </div>
+                <div class="summary-total-row val-green" id="summaryNetBalance" dir="ltr">0.00</div>
+            </div>
+
+            <div class="dual-action-row">
+                <button type="button" class="capsule-btn" onclick="openAddTransactionModalDirect(event)">إضافة سند: <span class="val-green">له</span> / <span class="val-red">عليه</span></button>
+                <button type="button" class="capsule-btn" onclick="openStatementView()">📋 كشف حساب</button>
+            </div>
+
+            <div class="filter-section search-container">
+                <div class="filter-select-box capsule-btn" onclick="toggleAccountFilterMenu(event)" style="justify-content: space-between; padding: 0 16px;">
+                    <span id="currentFilterLabel">📑 الفواتير الآجلة ولم تسدد</span>
+                    <span style="color: var(--neon-border); font-size: 12px;">▼</span>
+
+                    <div class="dropdown-list" id="accountFilterDropdown">
+                        <div class="dropdown-item" onclick="setAccountFilter('deferred', event)">📑 الفواتير الآجلة ولم تسدد</div>
+                        <div class="dropdown-item" onclick="setAccountFilter('all_invoices', event)">📦 جميع الفواتير</div>
+                        <div class="dropdown-item" onclick="setAccountFilter('vouchers', event)">💵 المبالغ المسددة <span class="val-green">له</span> و <span class="val-red">عليه</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="accountTransactionsTableBody" class="invoice-list"></div>
+        </div>
+    </div>
+
+    <!-- الشاشة 3: واجهة كشف الحساب -->
+    <div id="customer-statement-view" class="view-section">
+        <div class="header header-records">
+            <span id="statementHeaderTitle">كشف حساب العميل</span>
+        </div>
+
+        <div class="main-container statement-container" id="pdf-wrapper" style="padding-top: 10px;">
+            <div class="table-wrapper">
+                <table id="printableStatementTable">
+                    <thead>
+                        <tr>
+                            <th style="text-align: right; width: 60%;">البيان، التاريخ والملاحظات</th>
+                            <th class="val-red" style="width: 20%; text-align: center;">عليه (مديونية)</th>
+                            <th class="val-green" style="width: 20%; text-align: center;">له (تسديد)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="statementTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- الشريط السفلي الموحد -->
+    <div class="unified-bottom-bar" onclick="event.stopPropagation()">
+        <button type="button" class="header-back-btn" onclick="goBackSmart(event)">
+            <span class="arrow">⬅</span>
+            <span class="text">BACK</span>
+        </button>
+
+        <div class="bottom-capsules">
+            <div class="capsule" onclick="toggleDurationMenu(event)">
+                📅 <span id="currentDurationLabelOutside">مدى العمل (الكل)</span>
+                <div class="dropdown-menu" id="durationDropdownOutside">
+                    <div class="dropdown-menu-item" onclick="filterByDate('اليوم', 'today', event)">اليوم</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('أمس', 'yesterday', event)">أمس</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('آخر 7 أيام', '7days', event)">آخر 7 أيام</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('هذا الشهر', 'thisMonth', event)">هذا الشهر</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('آخر 30 يوم', '30days', event)">آخر 30 يوم</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('الشهر الماضي', 'lastMonth', event)">الشهر الماضي</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('مدى العمل (الكل)', 'allTime', event)">مدى العمل (الكل)</div>
+                    <div class="dropdown-menu-item" onclick="openCustomDateModal(event)">📅 تاريخ مخصص...</div>
+                </div>
+            </div>
+
+            <div class="capsule print-btn" onclick="togglePrintOptions(event)">
+                🖨️ خيارات
+                <div class="dropdown-menu" id="floatingPrintMenu">
+                    <div class="dropdown-menu-item" id="optThermalPrint" onclick="handlePrintAction('thermal')">🧾 طباعة حرارية (80mm)</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('a4')">🖨️ طباعة ورقة (A4)</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('pdf_export')">📄 مشاركة / تصدير PDF</div>
+                    <div class="dropdown-menu-item" onclick="toggleAccordionSubMenu(event, 'excelSubOptionsList')"><span>📊 إكسيل (Excel)</span> <span>▼</span></div>
+                    <div class="sub-accordion-content" id="excelSubOptionsList" onclick="event.stopPropagation()">
+                        <div class="sub-dropdown-item" onclick="exportExcel()">📤 تصدير بيانات</div>
+                        <div class="sub-dropdown-item" onclick="triggerExcelImport()">📥 استيراد من إكسيل</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="excelImportInput" hidden accept=".xlsx, .xls" onchange="importCustomersExcel(event)">
+
+    <!-- ================= النوافذ المنبثقة ================= -->
+
+    <div class="modal-overlay" id="customDateModal" onclick="window.SerajUI.closeModal('customDateModal')">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3>تحديد فترة مخصصة</h3></div>
+            <div class="compact-row"><label>من تاريخ:</label><input type="date" id="startDateInput"></div>
+            <div class="compact-row"><label>إلى تاريخ:</label><input type="date" id="endDateInput"></div>
+            <div class="compact-btns">
+                <button type="button" class="btn-close-ai" onclick="window.SerajUI.closeModal('customDateModal')">إلغاء</button>
+                <button type="button" class="btn-save-ai" onclick="applyCustomDateRange(event)">تطبيق البحث</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="editCustomerModal" onclick="closeModals(event)">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3>تعديل بيانات العميل</h3></div>
+            <input type="hidden" id="editCustId">
+            <div class="compact-row"><label>اسم العميل:</label><input type="text" id="editCustName"></div>
+            <div class="compact-row"><label>رقم الموبايل:</label><input type="text" id="editCustPhone" dir="ltr"></div>
+            <div class="compact-row"><label>ملاحظات:</label><input type="text" id="editCustNotes"></div>
+
+            <div class="compact-btns" style="border-top: none; padding-top: 4px; margin-top: 6px;">
+                <button type="button" class="btn-close-ai owner-only" data-role="owner" onclick="deleteCustomer(event)">🗑️ حذف العميل (أرشفة)</button>
+            </div>
+
+            <div class="compact-btns">
+                <button type="button" class="btn-close-ai" onclick="closeModals(event)">إلغاء</button>
+                <button type="button" class="btn-save-ai" onclick="window.Utils.preventDoubleClick(this, () => saveEditedCustomer(event))">حفظ التعديلات</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="addTransactionModal" onclick="closeModals(event)">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3>إضافة سند عميل جديد</h3></div>
+
+            <div class="radio-group" style="margin-bottom: 12px;">
+                <label class="val-green">
+                    <input type="radio" name="transType" value="receipt" checked> تحصيل نقدية (له/تسديد)
+                </label>
+                <label class="val-red">
+                    <input type="radio" name="transType" value="payment"> مديونية / سحب (عليه)
+                </label>
+            </div>
+
+            <div class="compact-row"><label>المبلغ:</label><input type="number" id="transAmount" value="" placeholder="0.00" onclick="this.select()" min="0" step="any"></div>
+            <div class="compact-row"><label>الملاحظات:</label><input type="text" id="transNotes" placeholder="اكتب البيان أو الملاحظات..."></div>
+            <div class="compact-row"><label>التاريخ:</label><input type="date" id="transDate"></div>
+
+            <div class="compact-row">
+                <label>الخزينة:</label>
+                <div style="flex: 1; position: relative;">
+                    <input type="hidden" id="transTreasurySelect" value="main">
+                    <div class="treasury-select" style="position: relative; cursor: pointer; display: flex; justify-content: space-between; align-items: center; height: 44px; padding: 0 12px;" onclick="toggleCustomSelect(event, 'transTreasuryDropdown')">
+                        <span style="font-size: 12px; color: var(--neon-border);">▼</span>
+                        <span id="transTreasuryLabel">الخزينة الرئيسية (كاش)</span>
+                        <span></span>
+
+                        <div class="dropdown-list" id="transTreasuryDropdown" style="bottom: 100%; top: auto; margin-bottom: 8px; border-radius: 12px; width: 100%; z-index: 2100;">
+                            <div class="dropdown-item" style="justify-content: center;" onclick="setCustomSelect('transTreasurySelect', 'transTreasuryLabel', 'main', 'الخزينة الرئيسية (كاش)', event)">الخزينة الرئيسية (كاش)</div>
+                            <div class="dropdown-item" style="justify-content: center;" onclick="setCustomSelect('transTreasurySelect', 'transTreasuryLabel', 'insta', 'إنستا (InstaPay)', event)">إنستا (InstaPay)</div>
+                            <div class="dropdown-item" style="justify-content: center;" onclick="setCustomSelect('transTreasurySelect', 'transTreasuryLabel', 'wallet', 'المحفظة الإلكترونية', event)">المحفظة الإلكترونية</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="compact-btns">
+                <button type="button" class="btn-close-ai" onclick="closeModals(event)">إلغاء</button>
+                <button type="button" class="btn-save-ai" onclick="window.Utils.preventDoubleClick(this, () => saveTransaction(event))">تأكيد العملية</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="invoicePaymentModal" onclick="closeModals(event)">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3 id="payModalHeaderTitle">تحصيل مبالغ متبقية لفاتورة</h3></div>
+            <div class="summary-total-row val-red" style="border: 1.5px solid var(--neon-border-soft); border-radius: 12px; margin-bottom: 12px;">
+                المبلغ المتبقي: <span id="payModalRemainingText" class="badge-unpaid" dir="ltr">0.00</span> ج
+            </div>
+            <div class="compact-row"><label>المدفوع:</label><input type="number" id="payModalAmountInput" value="0" onclick="this.select()" min="0" step="any"></div>
+            <div class="compact-row"><label>ملاحظات:</label><input type="text" id="payModalNotesInput" placeholder="إضافة ملاحظات السداد..."></div>
+            <div class="compact-row"><label>التاريخ:</label><input type="date" id="payModalDateInput"></div>
+            <div class="compact-row">
+                <label>الخزينة:</label>
+                <div style="flex: 1; position: relative;">
+                    <input type="hidden" id="payModalTreasurySelect" value="main">
+                    <div class="treasury-select" style="position: relative; cursor: pointer; display: flex; justify-content: space-between; align-items: center; height: 44px; padding: 0 12px;" onclick="toggleCustomSelect(event, 'payModalTreasuryDropdown')">
+                        <span style="font-size: 12px; color: var(--neon-border);">▼</span>
+                        <span id="payModalTreasuryLabel">الخزينة الرئيسية (كاش)</span>
+                        <span></span>
+
+                        <div class="dropdown-list" id="payModalTreasuryDropdown" style="bottom: 100%; top: auto; margin-bottom: 8px; border-radius: 12px; width: 100%; z-index: 2100;">
+                            <div class="dropdown-item" style="justify-content: center;" onclick="setCustomSelect('payModalTreasurySelect', 'payModalTreasuryLabel', 'main', 'الخزينة الرئيسية (كاش)', event)">الخزينة الرئيسية (كاش)</div>
+                            <div class="dropdown-item" style="justify-content: center;" onclick="setCustomSelect('payModalTreasurySelect', 'payModalTreasuryLabel', 'insta', 'إنستا (InstaPay)', event)">إنستا (InstaPay)</div>
+                            <div class="dropdown-item" style="justify-content: center;" onclick="setCustomSelect('payModalTreasurySelect', 'payModalTreasuryLabel', 'wallet', 'المحفظة الإلكترونية', event)">المحفظة الإلكترونية</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="details-toggle-btn" onclick="openViewModalFromOpt(event)">📄 عرض الفاتورة وأصنافها</button>
+            <div class="compact-btns">
+                <button type="button" class="btn-close-ai" onclick="closeModals(event)">إلغاء</button>
+                <button type="button" class="btn-save-ai" onclick="window.Utils.preventDoubleClick(this, () => confirmInvoicePayment(event))">تأكيد التحصيل</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="addCustomerModal" onclick="closeModals(event)">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3>إضافة عميل جديد</h3></div>
+            <div class="compact-row"><label>اسم العميل:</label><input type="text" id="newCustName"></div>
+            <div class="compact-row"><label>رقم الموبايل:</label><input type="text" id="newCustPhone" dir="ltr"></div>
+            <div class="compact-btns">
+                <button type="button" class="btn-close-ai" onclick="closeModals(event)">إلغاء</button>
+                <button type="button" class="btn-save-ai" onclick="window.Utils.preventDoubleClick(this, () => saveNewCustomer(event))">حفظ</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="editVoucherModal" onclick="closeModals(event)">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3>تعديل سند عميل</h3></div>
+
+            <div class="radio-group" style="margin-bottom: 12px;">
+                <label class="val-green">
+                    <input type="radio" name="editTransType" value="receipt" checked> تحصيل نقدية (له/تسديد)
+                </label>
+                <label class="val-red">
+                    <input type="radio" name="editTransType" value="payment"> مديونية / سحب (عليه)
+                </label>
+            </div>
+
+            <div class="compact-row"><label>المبلغ:</label><input type="number" id="editTransAmount" value="0" onclick="this.select()" min="0" step="any"></div>
+            <div class="compact-row"><label>الملاحظات:</label><input type="text" id="editTransNotes" placeholder="اكتب الملاحظات..."></div>
+            <div class="compact-row"><label>التاريخ:</label><input type="date" id="editTransDate"></div>
+            <div class="compact-row">
+                <label>الخزينة:</label>
+                <div style="flex: 1; position: relative;">
+                    <input type="hidden" id="editTransTreasurySelect" value="main">
+                    <div class="treasury-select" style="position: relative; cursor: pointer; display: flex; justify-content: space-between; align-items: center; height: 44px; padding: 0 12px;" onclick="toggleCustomSelect(event, 'editTransTreasuryDropdown')">
+                        <span style="font-size: 12px; color: var(--neon-border);">▼</span>
+                        <span id="editTransTreasuryLabel">الخزينة الرئيسية (كاش)</span>
+                        <span></span>
+
+                        <div class="dropdown-list" id="editTransTreasuryDropdown" style="bottom: 100%; top: auto; margin-bottom: 8px; border-radius: 12px; width: 100%; z-index: 2100;">
+                            <div class="dropdown-item" style="justify-content: center;" onclick="setCustomSelect('editTransTreasurySelect', 'editTransTreasuryLabel', 'main', 'الخزينة الرئيسية (كاش)', event)">الخزينة الرئيسية (كاش)</div>
+                            <div class="dropdown-item" style="justify-content: center;" onclick="setCustomSelect('editTransTreasurySelect', 'editTransTreasuryLabel', 'insta', 'إنستا (InstaPay)', event)">إنستا (InstaPay)</div>
+                            <div class="dropdown-item" style="justify-content: center;" onclick="setCustomSelect('editTransTreasurySelect', 'editTransTreasuryLabel', 'wallet', 'المحفظة الإلكترونية', event)">المحفظة الإلكترونية</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="compact-btns">
+                <button type="button" class="btn-close-ai" onclick="closeModals(event)">إلغاء</button>
+                <button type="button" class="btn-save-ai" onclick="window.Utils.preventDoubleClick(this, () => saveEditedVoucher(event))">حفظ التعديل</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="invoiceViewModal" onclick="closeModals(event)">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3 id="viewModalTitle">تفاصيل المستند</h3></div>
+            <div id="viewModalContent"></div>
+            <div class="compact-btns">
+                <button type="button" class="btn-close-ai" onclick="closeModals(event)">إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="print_manager.js"></script>
+
+    <script>
+        let customersDB = [];
+        let currentActiveCustomerId = null;
+        let currentFilterMode = 'deferred';
+        let currentStatementDuration = 'allTime';
+        let customStartDate = '';
+        let customEndDate = '';
+        let currentSortField = 'balance';
+        let currentSortAsc = false;
+        let activeSelectedInvoice = null;
+        let activeSelectedVoucher = null;
+        let savedScrollPosition = 0;
+
+        const CUST_VAULT_LABELS = {
+            main: 'الخزينة الرئيسية (كاش)',
+            insta: 'إنستا (InstaPay)',
+            wallet: 'المحفظة الإلكترونية'
+        };
+
+        const safeHTML = (val) => window.Utils.sanitizeHTML(val);
+        const round2 = (val) => window.Utils.round2(val);
+
+        function updatePageBranding() {
+            const brand = window.PrintManager ? window.PrintManager.getShopBranding() : { shopName: window.APP_BRAND_CONFIG.appName };
+            document.title = `حسابات العملاء - ${brand.shopName}`;
+        }
+
+        function safeLoadData() {
+            if (typeof DB !== 'undefined') {
+                customersDB = DB.getCustomers(false, false) || [];
+            }
+        }
+
+        function getCustomersScrollContainer() {
+            return document.querySelector('#customers-list-view .table-wrapper') || document.getElementById('customers-list-view');
+        }
+
+        function closeAllMenus(e) {
+            if (e) e.stopPropagation();
+            ['accountFilterDropdown', 'durationDropdownOutside', 'floatingPrintMenu', 'excelSubOptionsList'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
+            document.querySelectorAll('.inline-action-dropdown').forEach(d => { d.style.display = 'none'; });
+            document.querySelectorAll('.treasury-select .dropdown-list').forEach(d => { d.style.display = 'none'; });
+        }
+
+        function toggleDurationMenu(e) {
+            if (e) { e.stopPropagation(); e.preventDefault(); }
+            const m = document.getElementById('durationDropdownOutside');
+            const isVisible = m && m.style.display === 'block';
+            closeAllMenus();
+            if (m && !isVisible) m.style.display = 'block';
+        }
+
+        function togglePrintOptions(e) {
+            if (e) { e.stopPropagation(); e.preventDefault(); }
+            const m = document.getElementById('floatingPrintMenu');
+            const isVisible = m && m.style.display === 'block';
+            closeAllMenus();
+            if (m && !isVisible) m.style.display = 'block';
+        }
+
+        function toggleAccordionSubMenu(e, subMenuId) {
+            if (e) { e.stopPropagation(); e.preventDefault(); }
+            const menu = document.getElementById(subMenuId);
+            if (!menu) return;
+            menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function toggleAccountFilterMenu(e) {
+            if (e) { e.stopPropagation(); e.preventDefault(); }
+            const m = document.getElementById('accountFilterDropdown');
+            const isVisible = m && m.style.display === 'block';
+            closeAllMenus();
+            if (m && !isVisible) m.style.display = 'block';
+        }
+
+        function toggleCustomSelect(event, dropdownId) {
+            if (event) event.stopPropagation();
+            const dropdown = document.getElementById(dropdownId);
+            const isVisible = dropdown && dropdown.style.display === 'block';
+            document.querySelectorAll('.treasury-select .dropdown-list').forEach(list => { list.style.display = 'none'; });
+            if (dropdown && !isVisible) dropdown.style.display = 'block';
+        }
+
+        function setCustomSelect(inputId, labelId, value, text, event) {
+            if (event) event.stopPropagation();
+            document.getElementById(inputId).value = value;
+            document.getElementById(labelId).textContent = text;
+            const drop = event && event.target ? event.target.closest('.dropdown-list') : null;
+            if (drop) drop.style.display = 'none';
+        }
+
+        function closeModals(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            ['addCustomerModal', 'addTransactionModal', 'customDateModal', 'invoicePaymentModal', 'invoiceViewModal', 'editVoucherModal', 'editCustomerModal'].forEach(id => {
+                window.SerajUI.closeModal(id);
+            });
+        }
+
+        function switchView(viewId) {
+            document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active-view'));
+            document.getElementById(viewId).classList.add('active-view');
+
+            const thermalOpt = document.getElementById('optThermalPrint');
+            if (thermalOpt) {
+                thermalOpt.style.display = (viewId === 'customers-list-view') ? 'none' : 'flex';
+            }
+
+            if (viewId === 'customers-list-view') {
+                currentActiveCustomerId = null;
+                renderCustomersList();
+                setTimeout(() => {
+                    const scrollContainer = getCustomersScrollContainer();
+                    if (scrollContainer) scrollContainer.scrollTop = savedScrollPosition;
+                }, 30);
+            }
+        }
+
+        function goBackSmart(e, fromPopState = false) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            if (document.getElementById('customer-statement-view').classList.contains('active-view')) {
+                if (!fromPopState && history.state && history.state.view === 'statement') {
+                    history.back();
+                } else {
+                    switchView('customer-account-view');
+                }
+            } else if (document.getElementById('customer-account-view').classList.contains('active-view')) {
+                if (!fromPopState && history.state && history.state.view === 'account') {
+                    history.back();
+                } else {
+                    switchView('customers-list-view');
+                }
+            } else if (!fromPopState) {
+                window.location.href = 'index.html';
+            }
+        }
+
+        // =========================================================================
+        // البحث والترتيب ورسم جدول العملاء (debounce + join('') + Pointer Guard)
+        // =========================================================================
+        const debouncedSearch = window.Utils.debounce(function() {
+            const sc = getCustomersScrollContainer();
+            if (sc) sc.scrollTop = 0;
+            savedScrollPosition = 0;
+            renderCustomersList();
+        }, 160);
+
+        function handleSearchKey(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const rawVal = (document.getElementById('customerSearch')?.value || '').trim();
+                if (!rawVal) return;
+                const normQ = window.Utils.normalizeName(rawVal);
+                const matched = customersDB.find(c => {
+                    const normC = window.Utils.normalizeName(c.name || '');
+                    return normC === normQ || normC.includes(normQ);
+                });
+                if (matched) {
+                    openCustomerAccount(matched.id);
+                } else {
+                    openAddCustomerModal();
+                    document.getElementById('newCustName').value = rawVal;
+                }
+            }
+        }
+
+        function sortCustomers(field) {
+            if (currentSortField === field) currentSortAsc = !currentSortAsc;
+            else { currentSortField = field; currentSortAsc = (field === 'name'); }
+            renderCustomersList();
+        }
+
+        window.renderCustomersList = renderCustomersList;
+        function renderCustomersList() {
+            if (document.getElementById('customer-account-view').classList.contains('active-view') && currentActiveCustomerId) {
+                const activeCust = customersDB.find(x => String(x.id) === String(currentActiveCustomerId));
+                if (activeCust) {
+                    updateAccountSummary(activeCust);
+                    renderAccountTransactions(activeCust);
+                }
+            }
+
+            const rawInput = (document.getElementById('customerSearch')?.value || '').trim();
+            const normQuery = window.Utils.normalizeName(rawInput);
+            const searchWords = normQuery ? normQuery.split(' ').filter(Boolean) : [];
+            const tbody = document.getElementById('customersTableBody');
+            if (!tbody) return;
+
+            let filtered = [];
+            if (searchWords.length === 0) {
+                filtered = customersDB.map(c => ({ customer: c, score: 0 }));
+            } else {
+                filtered = customersDB.map(c => {
+                    const cName = window.Utils.normalizeName(c.name || '');
+                    const cPhone = window.Utils.normalizeName(c.phone || '');
+                    const hay = `${cName} ${cPhone}`;
+                    let score = 0;
+                    let allMatched = true;
+                    for (let w = 0; w < searchWords.length; w++) {
+                        if (hay.includes(searchWords[w])) score += 1;
+                        else { allMatched = false; break; }
+                    }
+                    if (!allMatched) score = 0;
+                    else if (score > 0) {
+                        if (cName.startsWith(normQuery)) score += 5;
+                        else if (cName.startsWith(searchWords[0])) score += 2;
+                    }
+                    return { customer: c, score };
+                }).filter(item => item.score > 0);
+            }
+
+            filtered.sort((a, b) => {
+                if (searchWords.length > 0 && b.score !== a.score) return b.score - a.score;
+                const valA = a.customer;
+                const valB = b.customer;
+                if (currentSortField === 'name') {
+                    return currentSortAsc
+                        ? String(valA.name || '').localeCompare(String(valB.name || ''), 'ar')
+                        : String(valB.name || '').localeCompare(String(valA.name || ''), 'ar');
+                }
+                if (currentSortField === 'balance') {
+                    const numA = valA.isNetDebt ? (valA.netBalanceVal || 0) : -(valA.netBalanceVal || 0);
+                    const numB = valB.isNetDebt ? (valB.netBalanceVal || 0) : -(valB.netBalanceVal || 0);
+                    return currentSortAsc ? (numA - numB) : (numB - numA);
+                }
+                if (currentSortField === 'date') {
+                    const dateA = valA.lastActivityDate ? window.Utils.getSafeTime(valA.lastActivityDate) : 0;
+                    const dateB = valB.lastActivityDate ? window.Utils.getSafeTime(valB.lastActivityDate) : 0;
+                    return currentSortAsc ? (dateA - dateB) : (dateB - dateA);
+                }
+                return 0;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" style="padding: 22px; color: var(--text-muted);">${rawInput ? `اضغط Enter لإضافة "${safeHTML(rawInput)}" كعميل جديد` : 'لا يوجد عملاء مسجلون بعد'}</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(({ customer: c }) => {
+                const netVal = round2(c.netBalanceVal || 0);
+                let balBadge = `<span class="val-green" dir="ltr">0.00</span>`;
+                if (netVal > 0.009) {
+                    balBadge = c.isNetDebt
+                        ? `<span class="val-red" dir="ltr">${netVal.toFixed(2)}</span>`
+                        : `<span class="val-green" dir="ltr">${netVal.toFixed(2)}</span>`;
+                }
+                const lastDate = c.lastActivityDate || 'لا يوجد';
+                return `
+                    <tr class="cust-row" data-cust-id="${safeHTML(c.id)}">
+                        <td style="text-align: right;"><span class="tag-customer">${safeHTML(c.name)}</span></td>
+                        <td>${balBadge}</td>
+                        <td style="color: var(--text-muted); font-size: 14px;">${safeHTML(lastDate)}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Pointer Guard (نقرة واحدة = فتح الحساب، ضغط مطول = تعديل العميل) بدون تكرار اللمس
+            tbody.querySelectorAll('tr.cust-row[data-cust-id]').forEach(tr => {
+                const cid = tr.getAttribute('data-cust-id');
+                let startY = 0;
+                let moved = false;
+                let longPressed = false;
+                let timer = null;
+
+                tr.addEventListener('pointerdown', (e) => {
+                    if (e.button !== undefined && e.button !== 0) return;
+                    startY = e.clientY;
+                    moved = false;
+                    longPressed = false;
+                    clearTimeout(timer);
+                    timer = setTimeout(() => {
+                        if (!moved) {
+                            longPressed = true;
+                            openEditCustomerModal(cid);
+                        }
+                    }, 550);
+                });
+
+                tr.addEventListener('pointermove', (e) => {
+                    if (Math.abs(e.clientY - startY) > 12) {
+                        moved = true;
+                        clearTimeout(timer);
+                    }
+                });
+
+                tr.addEventListener('pointerup', (e) => {
+                    clearTimeout(timer);
+                    if (moved || longPressed) return;
+                    if (e.button !== undefined && e.button !== 0) return;
+                    openCustomerAccount(cid);
+                });
+
+                tr.addEventListener('pointercancel', () => {
+                    clearTimeout(timer);
+                    moved = true;
+                });
+            });
+        }
+
+        // =========================================================================
+        // إضافة وتعديل وحذف العميل
+        // =========================================================================
+        function openAddCustomerModal() {
+            document.getElementById('newCustName').value = '';
+            document.getElementById('newCustPhone').value = '';
+            window.SerajUI.openModal('addCustomerModal');
+        }
+
+        function saveNewCustomer(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            const name = document.getElementById('newCustName').value.trim();
+            const phone = String(document.getElementById('newCustPhone').value || '').trim();
+            if (!name) return SerajAlert('برجاء إدخال اسم العميل!', 'error');
+
+            const normNew = window.Utils.normalizeName(name);
+            const existing = customersDB.find(x => x && !x.isDeleted && !x.isArchived && window.Utils.normalizeName(x.name) === normNew);
+            if (existing) {
+                return SerajAlert(`⚠️ عذراً، هذا العميل مسجل مسبقاً باسم: "${existing.name}"!`, 'error');
+            }
+
+            const newId = window.Utils.generateUniqueId('C');
+            customersDB.push({
+                id: newId,
+                _cloudKey: window.Utils.generateUUID('CUST'),
+                name: name,
+                phone: phone,
+                balance: 0,
+                _lastModified: Date.now()
+            });
+
+            DB.saveCustomers(customersDB);
+            safeLoadData();
+            closeModals();
+            renderCustomersList();
+            SerajAlert('✅ تم إضافة العميل بنجاح.', 'success');
+        }
+
+        function openEditCustomerModal(id) {
+            closeAllMenus();
+            const c = customersDB.find(x => String(x.id) === String(id));
+            if (!c) return;
+            document.getElementById('editCustId').value = c.id;
+            document.getElementById('editCustName').value = c.name || '';
+            document.getElementById('editCustPhone').value = String(c.phone || '');
+            document.getElementById('editCustNotes').value = c.notes || '';
+            window.SerajUI.openModal('editCustomerModal');
+        }
+
+        function saveEditedCustomer(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            const id = document.getElementById('editCustId').value;
+            const c = customersDB.find(x => String(x.id) === String(id));
+            if (!c) return;
+
+            const newName = document.getElementById('editCustName').value.trim();
+            if (!newName) return SerajAlert('الاسم مطلوب!', 'error');
+
+            const normNew = window.Utils.normalizeName(newName);
+            const duplicate = customersDB.find(x => String(x.id) !== String(c.id) && !x.isDeleted && window.Utils.normalizeName(x.name) === normNew);
+            if (duplicate) {
+                return SerajAlert(`⚠️ يوجد عميل آخر مسجل بالفعل باسم "${duplicate.name}"!`, 'error');
+            }
+
+            c.name = newName;
+            c.phone = String(document.getElementById('editCustPhone').value || '').trim();
+            c.notes = document.getElementById('editCustNotes').value.trim();
+            c._lastModified = Date.now();
+
+            DB.saveCustomers(customersDB);
+            safeLoadData();
+            closeModals();
+            renderCustomersList();
+            SerajAlert('✅ تم تعديل بيانات العميل بنجاح.', 'success');
+        }
+
+        async function deleteCustomer(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            if (!window.SerajAuth.isOwner()) {
+                return SerajAlert('⛔ حذف العملاء مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
+            const id = document.getElementById('editCustId').value;
+            const c = customersDB.find(x => String(x.id) === String(id));
+            if (!c) return;
+
+            if (Math.abs(parseFloat(c.balance) || 0) > 0.05) {
+                return SerajAlert('❌ لا يمكن حذف عميل عليه أو له رصيد! قم بتصفية حسابه (0.00) أولاً.', 'error');
+            }
+
+            const ok = await SerajConfirm('هل أنت متأكد من أرشفة وحذف هذا العميل؟ (سيختفي من القائمة مع الحفاظ على أرشيف فواتيره)');
+            if (!ok) return;
+
+            DB.deleteItem('customers', c.id, 'soft');
+            safeLoadData();
+            closeModals();
+            renderCustomersList();
+            SerajAlert('🗑️ تم أرشفة وحذف العميل بنجاح.', 'success');
+        }
+
+        // =========================================================================
+        // حساب العميل وكروت الفواتير والسندات
+        // =========================================================================
+        function openCustomerAccount(id) {
+            const sc = getCustomersScrollContainer();
+            if (sc) savedScrollPosition = sc.scrollTop;
+
+            currentActiveCustomerId = id;
+            const c = DB.calculateCustomerBalances(id) || customersDB.find(x => String(x.id) === String(id));
+            if (!c) return;
+
+            document.getElementById('accountHeaderTitle').innerHTML = `حسابات العميل: <span class="tag-customer">${safeHTML(c.name)}</span>`;
+            updateAccountSummary(c);
+            renderAccountTransactions(c);
+            switchView('customer-account-view');
+            history.pushState({ view: 'account' }, '');
+        }
+
+        window.updateAccountSummary = updateAccountSummary;
+        function updateAccountSummary(customer) {
+            if (!customer && currentActiveCustomerId) customer = DB.calculateCustomerBalances(currentActiveCustomerId);
+            if (!customer) return;
+
+            const applyColorClass = (elementId, amount, isDebt) => {
+                const el = document.getElementById(elementId);
+                if (!el) return;
+                const val = Math.abs(round2(amount));
+                el.textContent = val.toFixed(2);
+                el.classList.remove('val-red', 'val-green');
+                if (val < 0.01) el.classList.add('val-green');
+                else if (isDebt) el.classList.add('val-red');
+                else el.classList.add('val-green');
+            };
+
+            applyColorClass('summaryCurrentBalance', customer.displayCurrentBalance || 0, customer.isCurrentBalDebt !== false);
+            applyColorClass('summaryDeferredInvoices', customer.deferredInvoicesTotal || 0, true);
+            applyColorClass('summaryNetBalance', customer.netBalanceVal || 0, customer.isNetDebt !== false);
+        }
+
+        function setAccountFilter(mode, e) {
+            if (e) e.stopPropagation();
+            currentFilterMode = mode;
+
+            const labels = {
+                deferred: '📑 الفواتير الآجلة ولم تسدد',
+                all_invoices: '📦 جميع الفواتير',
+                vouchers: '💵 المبالغ المسددة <span class="val-green">له</span> و <span class="val-red">عليه</span>'
+            };
+            const labelEl = document.getElementById('currentFilterLabel');
+            if (labelEl && labels[mode]) labelEl.innerHTML = labels[mode];
+
+            const dropdown = document.getElementById('accountFilterDropdown');
+            if (dropdown) dropdown.style.display = 'none';
+
+            const c = DB.calculateCustomerBalances(currentActiveCustomerId);
+            if (c) renderAccountTransactions(c);
+        }
+
+        function _matchesDurationFilter(dateStr) {
+            if (currentStatementDuration === 'allTime' || !dateStr) return true;
+            const normItem = window.Utils.normalizeDateStr(dateStr);
+            const now = new Date();
+            const todayStr = window.Utils.getLocalDateString(now);
+
+            if (currentStatementDuration === 'custom' && customStartDate && customEndDate) {
+                return normItem >= customStartDate && normItem <= customEndDate;
+            }
+            if (currentStatementDuration === 'today') return normItem === todayStr;
+            if (currentStatementDuration === 'yesterday') {
+                const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+                return normItem === window.Utils.getLocalDateString(y);
+            }
+            if (currentStatementDuration === '7days') {
+                const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+                return normItem >= window.Utils.getLocalDateString(d) && normItem <= todayStr;
+            }
+            if (currentStatementDuration === '30days') {
+                const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+                return normItem >= window.Utils.getLocalDateString(d) && normItem <= todayStr;
+            }
+            if (currentStatementDuration === 'thisMonth') {
+                const startM = window.Utils.getLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
+                return normItem >= startM && normItem <= todayStr;
+            }
+            if (currentStatementDuration === 'lastMonth') {
+                const lm = window.Utils.getLastMonthRange(now);
+                return normItem >= lm.start && normItem <= lm.end;
+            }
+            return true;
+        }
+
+        window.renderAccountTransactions = renderAccountTransactions;
+        function renderAccountTransactions(customer) {
+            if (!customer && currentActiveCustomerId) customer = DB.calculateCustomerBalances(currentActiveCustomerId);
+            const listContainer = document.getElementById('accountTransactionsTableBody');
+            if (!listContainer || !customer) return;
+
+            const allSalesInvoices = DB.getSalesInvoices(false) || [];
+            const cNorm = window.Utils.normalizeName(customer.name || '');
+
+            const customerInvoices = allSalesInvoices.filter(inv => {
+                if (!inv || inv.type === 'quotation' || inv.type === 'quote') return false;
+                const invNorm = window.Utils.normalizeName(inv.customer || inv.customerName || '');
+                return String(inv.customerId) === String(customer.id) || (cNorm !== '' && invNorm === cNorm);
+            });
+
+            let displayList = [];
+
+            if (currentFilterMode === 'deferred') {
+                customerInvoices.forEach(inv => {
+                    const rem = round2(inv.calculatedRemaining ?? inv.remaining ?? 0);
+                    if (rem > 0.009) {
+                        const totalReq = DB._computeInvoiceNetTotal(inv);
+                        const isReturn = ['return', 'return_sale', 'sales_return'].includes(inv.type);
+                        displayList.push({
+                            type: 'invoice_deferred',
+                            rawObj: inv,
+                            date: inv.date,
+                            titleHtml: `${isReturn ? 'فاتورة مرتجع آجل' : 'فاتورة آجل'} رقم: <span class="invoice-number">${safeHTML(inv.invoiceNo || inv.id)}</span>`,
+                            metaHtml: `<span class="badge-unpaid">المتبقي: ${rem.toFixed(2)}</span>`,
+                            amount: totalReq,
+                            amountClass: isReturn ? 'val-red' : 'text-white'
+                        });
+                    }
+                });
+            } else if (currentFilterMode === 'all_invoices') {
+                customerInvoices.forEach(inv => {
+                    const rem = round2(inv.calculatedRemaining ?? inv.remaining ?? 0);
+                    const isDef = rem > 0.009;
+                    const totalReq = DB._computeInvoiceNetTotal(inv);
+                    const isReturn = ['return', 'return_sale', 'sales_return'].includes(inv.type);
+                    displayList.push({
+                        type: isDef ? 'invoice_deferred' : 'invoice',
+                        rawObj: inv,
+                        date: inv.date,
+                        titleHtml: `${isReturn ? '<span class="val-red">فاتورة مرتجع</span>' : 'فاتورة'} رقم: <span class="invoice-number">${safeHTML(inv.invoiceNo || inv.id)}</span>`,
+                        metaHtml: isDef ? `<span class="badge-unpaid">المتبقي: ${rem.toFixed(2)}</span>` : `<span class="badge-paid">مسددة بالكامل</span>`,
+                        amount: totalReq,
+                        amountClass: isReturn ? 'val-red' : (isDef ? 'text-white' : 'val-green')
+                    });
+                });
+            } else if (currentFilterMode === 'vouchers') {
+                const vouchers = (customer.transactions || []).filter(t => t && t.type !== 'log' && !t.isCanceled && !t.isDeleted);
+                vouchers.forEach(t => {
+                    const isReceipt = (t.type === 'receipt');
+                    displayList.push({
+                        type: 'voucher',
+                        rawObj: t,
+                        date: t.date,
+                        titleHtml: `${isReceipt ? 'سند تحصيل نقدية' : 'سند مديونية/سحب'} رقم: <span class="invoice-number">${safeHTML(t.id)}</span>`,
+                        metaHtml: `<span class="color-notes">${safeHTML(t.notes || '---')}</span>`,
+                        amount: round2(t.amount),
+                        amountClass: isReceipt ? 'val-green' : 'val-red'
+                    });
+                });
+            }
+
+            displayList = displayList.filter(item => _matchesDurationFilter(item.date));
+            displayList.sort((a, b) => {
+                const diff = window.Utils.getSafeTime(b.rawObj?.timestamp || b.date) - window.Utils.getSafeTime(a.rawObj?.timestamp || a.date);
+                if (diff !== 0) return diff;
+                return window.Utils.extractSerialNum(b.rawObj?.id) - window.Utils.extractSerialNum(a.rawObj?.id);
+            });
+
+            if (displayList.length === 0) {
+                listContainer.innerHTML = `<div style="padding: 28px; text-align: center; color: var(--text-muted); font-weight: bold;">لا توجد حركات مطابقة في هذه الفترة.</div>`;
+                return;
+            }
+
+            const canDeleteTreasury = window.SerajAuth.canAccess('delete_treasury_move');
+
+            listContainer.innerHTML = displayList.map((item, index) => {
+                const dropdownId = `inlineMenu_${index}`;
+                let menuHtml = '';
+                if (item.type === 'invoice_deferred') {
+                    menuHtml = `
+                        <div id="${dropdownId}" class="inline-action-dropdown" onclick="event.stopPropagation()">
+                            <div class="inline-action-item" onclick="openPaymentModalFromInline(event)">💳 تحصيل الفاتورة</div>
+                            <div class="inline-action-item" onclick="openViewModalFromOpt(event)">📄 عرض الفاتورة</div>
+                        </div>
+                    `;
+                } else if (item.type === 'voucher') {
+                    menuHtml = `
+                        <div id="${dropdownId}" class="inline-action-dropdown" onclick="event.stopPropagation()">
+                            <div class="inline-action-item" onclick="openViewModalFromOpt(event)">👁️ عرض التفاصيل</div>
+                            ${canDeleteTreasury ? `<div class="inline-action-item" onclick="openEditVoucherModalFromInline(event)">✏️ تعديل السند</div>` : ''}
+                            ${canDeleteTreasury ? `<div class="inline-action-item val-red" onclick="deleteVoucherFromInline(event)">🗑️ حذف السند</div>` : ''}
+                        </div>
+                    `;
+                }
+
+                let devHtml = '';
+                if (item.type === 'voucher' && item.rawObj._device) {
+                    const editTag = (item.rawObj._lastModifiedBy && item.rawObj._lastModifiedBy !== item.rawObj._device)
+                        ? ` ✏️ تعديل: ${safeHTML(item.rawObj._lastModifiedBy)}`
+                        : '';
+                    devHtml = `<div class="inv-meta color-customer" style="font-size: 12px;">💻 بواسطة: ${safeHTML(item.rawObj._device)}${editTag}</div>`;
+                }
+
+                return `
+                    <div class="invoice-card" data-card-idx="${index}">
+                        <div class="inv-info" style="position: relative;">
+                            <div class="inv-customer">${item.titleHtml}</div>
+                            <div class="inv-meta">${item.metaHtml}</div>
+                            <div class="inv-meta">${safeHTML(item.date || '')}</div>
+                            ${devHtml}
+                            ${menuHtml}
+                        </div>
+                        <div class="inv-amount ${item.amountClass}">${item.amount.toFixed(2)}</div>
+                    </div>
+                `;
+            }).join('');
+
+            listContainer.querySelectorAll('.invoice-card[data-card-idx]').forEach(card => {
+                const idx = parseInt(card.getAttribute('data-card-idx'), 10);
+                card.onclick = (e) => {
+                    e.stopPropagation();
+                    closeAllMenus();
+                    const item = displayList[idx];
+                    if (!item) return;
+                    activeSelectedInvoice = item;
+                    activeSelectedVoucher = item.type === 'voucher' ? item.rawObj : null;
+                    if (item.type === 'invoice') {
+                        openViewModalFromOpt(e);
+                        return;
+                    }
+                    const menu = document.getElementById(`inlineMenu_${idx}`);
+                    if (menu) menu.style.display = 'block';
+                };
+            });
+        }
+
+        // =========================================================================
+        // كشف الحساب الموحد (صافي نهاية الفترة + currentAllTimeNetDebt منفصل)
+        // =========================================================================
+        function openStatementView() {
+            closeAllMenus();
+            const c = DB.calculateCustomerBalances(currentActiveCustomerId);
+            if (!c) return;
+            document.getElementById('statementHeaderTitle').innerHTML = `كشف حساب العميل: <span class="tag-customer">${safeHTML(c.name)}</span>`;
+            renderStatementTable(c);
+            switchView('customer-statement-view');
+            history.pushState({ view: 'statement' }, '');
+        }
+
+        function openCustomDateModal(e) {
+            if (e) e.stopPropagation();
+            closeAllMenus();
+            window.SerajUI.openModal('customDateModal');
+        }
+
+        function filterByDate(label, duration, event) {
+            if (event) { event.stopPropagation(); event.preventDefault(); }
+            if (duration === 'custom') return openCustomDateModal();
+
+            currentStatementDuration = duration;
+            const outLabel = document.getElementById('currentDurationLabelOutside');
+            if (outLabel) outLabel.textContent = label;
+            closeAllMenus();
+
+            if (currentActiveCustomerId) {
+                const c = DB.calculateCustomerBalances(currentActiveCustomerId);
+                if (c) {
+                    renderStatementTable(c);
+                    renderAccountTransactions(c);
+                }
+            }
+        }
+
+        function applyCustomDateRange(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            customStartDate = document.getElementById('startDateInput').value;
+            customEndDate = document.getElementById('endDateInput').value;
+            if (!customStartDate || !customEndDate) {
+                return SerajAlert('يرجى اختيار تاريخ البداية والنهاية!', 'error');
+            }
+            currentStatementDuration = 'custom';
+            document.getElementById('currentDurationLabelOutside').textContent = `${customStartDate} إلى ${customEndDate}`;
+            window.SerajUI.closeModal('customDateModal');
+
+            if (currentActiveCustomerId) {
+                const c = DB.calculateCustomerBalances(currentActiveCustomerId);
+                if (c) {
+                    renderStatementTable(c);
+                    renderAccountTransactions(c);
+                }
+            }
+        }
+
+        window.renderStatementTable = renderStatementTable;
+        function renderStatementTable(customer) {
+            if (!customer && currentActiveCustomerId) customer = DB.calculateCustomerBalances(currentActiveCustomerId);
+            const tbody = document.getElementById('statementTableBody');
+            if (!tbody || !customer) return;
+
+            const stmt = DB.getCustomerStatement(customer.id, currentStatementDuration, customStartDate, customEndDate);
+            if (!stmt) return;
+
+            const rows = [];
+
+            if (currentStatementDuration !== 'allTime' && (stmt.prevAleih > 0 || stmt.prevLeh > 0)) {
+                const prevNet = round2(stmt.prevAleih - stmt.prevLeh);
+                const dPrevAleih = prevNet > 0 ? prevNet : 0;
+                const dPrevLeh = prevNet < 0 ? Math.abs(prevNet) : 0;
+                rows.push(`
+                    <tr style="background-color: var(--card-bg-alt);">
+                        <td style="text-align: right; color: var(--text-muted);">رصيد حساب سابق (ما قبل الفترة)</td>
+                        <td class="val-red" dir="ltr">${dPrevAleih > 0 ? dPrevAleih.toFixed(2) : '-'}</td>
+                        <td class="val-green" dir="ltr">${dPrevLeh > 0 ? dPrevLeh.toFixed(2) : '-'}</td>
+                    </tr>
+                `);
+            }
+
+            if (stmt.rows.length === 0) {
+                rows.push(`<tr><td colspan="3" style="padding: 20px; color: var(--text-muted);">لا توجد حركات في هذه الفترة</td></tr>`);
+            } else {
+                stmt.rows.forEach(item => {
+                    const safeTitle = window.Utils.sanitizeRichHTML(item.title || '');
+                    const notesHtml = (item.notes && item.notes !== '---')
+                        ? `<div class="color-notes" style="margin-top: 3px;">📝 ${safeHTML(item.notes)}</div>`
+                        : '';
+
+                    rows.push(`
+                        <tr>
+                            <td style="text-align: right;">
+                                <div>${safeTitle}</div>
+                                <div class="cell-meta">📅 ${safeHTML(item.date || '')}</div>
+                                ${notesHtml}
+                            </td>
+                            <td class="val-red" dir="ltr">${item.aleih > 0 ? item.aleih.toFixed(2) : '-'}</td>
+                            <td class="val-green" dir="ltr">${item.leh > 0 ? item.leh.toFixed(2) : '-'}</td>
+                        </tr>
+                    `);
+                });
+            }
+
+            rows.push(`
+                <tr style="background-color: var(--table-header-bg);">
+                    <td style="text-align: right;">إجمالي الحركات للفترة:</td>
+                    <td class="val-red" dir="ltr">${stmt.totalAleih.toFixed(2)}</td>
+                    <td class="val-green" dir="ltr">${stmt.totalLeh.toFixed(2)}</td>
+                </tr>
+            `);
+
+            // صافي نهاية الفترة المحددة
+            const periodNet = round2(stmt.netDebt);
+            const periodClass = periodNet > 0.009 ? 'val-red' : (periodNet < -0.009 ? 'val-green' : '');
+            const periodText = periodNet > 0.009
+                ? `عليه مديونية ${Math.abs(periodNet).toFixed(2)}`
+                : (periodNet < -0.009 ? `له رصيد ${Math.abs(periodNet).toFixed(2)}` : 'الرصيد مصفّر (0.00)');
+
+            rows.push(`
+                <tr style="background-color: var(--card-bg-alt);">
+                    <td style="text-align: right; font-size: 16px;">${currentStatementDuration === 'allTime' ? 'الرصيد الصافي النهائي:' : 'صافي الرصيد بنهاية الفترة:'}</td>
+                    <td colspan="2" class="${periodClass}" style="font-size: 18px;">${periodText}</td>
+                </tr>
+            `);
+
+            // عرض الرصيد الإجمالي الحالي كسطر مستقل عند اختيار فترة محددة مختلفة عن الرصيد الكلي
+            if (currentStatementDuration !== 'allTime' && Math.abs(round2(stmt.currentAllTimeNetDebt) - periodNet) > 0.009) {
+                const allTimeNet = round2(stmt.currentAllTimeNetDebt);
+                const allTimeClass = allTimeNet > 0.009 ? 'val-red' : (allTimeNet < -0.009 ? 'val-green' : '');
+                const allTimeText = allTimeNet > 0.009
+                    ? `عليه مديونية ${Math.abs(allTimeNet).toFixed(2)}`
+                    : (allTimeNet < -0.009 ? `له رصيد ${Math.abs(allTimeNet).toFixed(2)}` : 'الرصيد مصفّر (0.00)');
+                rows.push(`
+                    <tr style="background-color: var(--bg-dark-2);">
+                        <td style="text-align: right; font-size: 14px; color: var(--text-muted);">الرصيد الإجمالي الحالي (حتى اليوم):</td>
+                        <td colspan="2" class="${allTimeClass}" style="font-size: 16px;">${allTimeText}</td>
+                    </tr>
+                `);
+            }
+
+            tbody.innerHTML = rows.join('');
+        }
+
+        // =========================================================================
+        // السندات والتحصيل والتعديل والحذف (العقدة المستقلة customer_vouchers + الخزينة)
+        // =========================================================================
+        function openAddTransactionModalDirect(e) {
+            if (e) e.stopPropagation();
+            closeAllMenus();
+            document.getElementById('transAmount').value = '';
+            document.getElementById('transNotes').value = '';
+            document.getElementById('transDate').value = window.Utils.getLocalDateString();
+
+            const receiptRadio = document.querySelector('input[name="transType"][value="receipt"]');
+            if (receiptRadio) receiptRadio.checked = true;
+
+            document.getElementById('transTreasurySelect').value = 'main';
+            document.getElementById('transTreasuryLabel').textContent = CUST_VAULT_LABELS.main;
+
+            window.SerajUI.openModal('addTransactionModal');
+            setTimeout(() => document.getElementById('transAmount')?.focus(), 80);
+        }
+
+        function saveTransaction(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            const c = customersDB.find(x => String(x.id) === String(currentActiveCustomerId));
+            if (!c) return SerajAlert('لم يتم تحديد عميل!', 'error');
+
+            const amount = round2(document.getElementById('transAmount').value);
+            const notes = document.getElementById('transNotes').value.trim();
+            const date = document.getElementById('transDate').value || window.Utils.getLocalDateString();
+            const treasuryKey = document.getElementById('transTreasurySelect').value || 'main';
+            const txType = document.querySelector('input[name="transType"]:checked')?.value || 'receipt';
+
+            if (amount <= 0) return SerajAlert('أدخل مبلغاً صحيحاً أكبر من الصفر!', 'error');
+
+            const voucher = DB.addCustomerVoucher({
+                customerId: String(c.id),
+                customerName: c.name,
+                type: txType,
+                amount: amount,
+                notes: notes,
+                treasury: treasuryKey,
+                vault: treasuryKey,
+                date: date,
+                allocatedInvoices: []
+            });
+
+            DB.recordTreasuryTransaction({
+                id: String(voucher.id),
+                type: txType === 'receipt' ? 'customer_receipt' : 'customer_payment',
+                vault: treasuryKey,
+                amountAdd: txType === 'receipt' ? amount : 0,
+                amountDeduct: txType === 'payment' ? amount : 0,
+                amount: amount,
+                notes: `سند ${txType === 'receipt' ? 'تحصيل' : 'سحب'} رقم ${voucher.id}: ${c.name.trim()}${notes ? ' - ' + notes : ''}`,
+                date: date,
+                customerId: String(c.id),
+                customer: c.name.trim()
+            });
+
+            safeLoadData();
+            closeModals();
+            const updatedCustomer = DB.calculateCustomerBalances(currentActiveCustomerId);
+            if (updatedCustomer) {
+                updateAccountSummary(updatedCustomer);
+                renderAccountTransactions(updatedCustomer);
+            }
+            window.SerajAudio.playSuccess();
+            SerajAlert(`✅ تم حفظ السند بنجاح!\nرقم السند: ${voucher.id}`, 'success');
+        }
+
+        function openPaymentModalFromInline(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            closeAllMenus();
+            if (!activeSelectedInvoice || !activeSelectedInvoice.rawObj) return;
+
+            const inv = activeSelectedInvoice.rawObj;
+            const rem = round2(inv.calculatedRemaining ?? inv.remaining ?? 0);
+            const displayInvNo = inv.invoiceNo || inv.id;
+
+            document.getElementById('payModalHeaderTitle').innerHTML = `تحصيل فاتورة رقم: <span class="invoice-number">${safeHTML(displayInvNo)}</span>`;
+            document.getElementById('payModalRemainingText').textContent = rem.toFixed(2);
+            document.getElementById('payModalAmountInput').value = rem.toFixed(2);
+            document.getElementById('payModalNotesInput').value = '';
+            document.getElementById('payModalDateInput').value = window.Utils.getLocalDateString();
+            document.getElementById('payModalTreasurySelect').value = 'main';
+            document.getElementById('payModalTreasuryLabel').textContent = CUST_VAULT_LABELS.main;
+
+            window.SerajUI.openModal('invoicePaymentModal');
+        }
+
+        function confirmInvoicePayment(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            if (!activeSelectedInvoice || !activeSelectedInvoice.rawObj) return;
+
+            const inv = activeSelectedInvoice.rawObj;
+            const maxRem = round2(inv.calculatedRemaining ?? inv.remaining ?? DB._computeInvoiceNetTotal(inv));
+            const pAmount = round2(document.getElementById('payModalAmountInput').value);
+            const customNotes = document.getElementById('payModalNotesInput').value.trim();
+            const date = document.getElementById('payModalDateInput').value || window.Utils.getLocalDateString();
+            const treasuryKey = document.getElementById('payModalTreasurySelect').value || 'main';
+
+            if (pAmount <= 0 || pAmount > (maxRem + 0.05)) {
+                return SerajAlert('أدخل مبلغاً صحيحاً لا يتجاوز المتبقي!', 'error');
+            }
+
+            const c = customersDB.find(x => String(x.id) === String(currentActiveCustomerId));
+            if (!c) return;
+
+            const invLabel = inv.invoiceNo || inv.id;
+            const notes = customNotes ? `${customNotes} (فاتورة ${invLabel})` : `تحصيل نقدي (فاتورة ${invLabel})`;
+            const allocatedInvoices = [{ id: inv.id, invoiceId: inv.id, deducted: pAmount }];
+
+            const voucher = DB.addCustomerVoucher({
+                customerId: String(c.id),
+                customerName: c.name,
+                type: 'receipt',
+                amount: pAmount,
+                notes: notes,
+                treasury: treasuryKey,
+                vault: treasuryKey,
+                date: date,
+                allocatedInvoices: allocatedInvoices
+            });
+
+            DB.recordTreasuryTransaction({
+                id: String(voucher.id),
+                type: 'customer_receipt',
+                vault: treasuryKey,
+                amountAdd: pAmount,
+                amountDeduct: 0,
+                amount: pAmount,
+                notes: `سند تحصيل رقم ${voucher.id} من العميل: ${c.name.trim()} (${notes})`,
+                date: date,
+                invoiceNo: invLabel,
+                allocatedInvoices: allocatedInvoices,
+                customerId: String(c.id),
+                customer: c.name.trim()
+            });
+
+            safeLoadData();
+            closeModals();
+            const updatedCustomer = DB.calculateCustomerBalances(currentActiveCustomerId);
+            if (updatedCustomer) {
+                updateAccountSummary(updatedCustomer);
+                renderAccountTransactions(updatedCustomer);
+            }
+            window.SerajAudio.playSuccess();
+            SerajAlert(`✅ تم التحصيل بنجاح!\nرقم السند: ${voucher.id}`, 'success');
+        }
+
+        function openEditVoucherModalFromInline(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            closeAllMenus();
+            if (!window.SerajAuth.canAccess('reverse_treasury_move')) {
+                return SerajAlert('⛔ تعديل السندات مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
+            if (!activeSelectedVoucher) return;
+
+            const v = activeSelectedVoucher;
+            const vKey = v.treasury || v.vault || 'main';
+            document.getElementById('editTransAmount').value = round2(v.amount);
+            document.getElementById('editTransDate').value = v.date || window.Utils.getLocalDateString();
+            document.getElementById('editTransNotes').value = v.notes || '';
+            document.getElementById('editTransTreasurySelect').value = vKey;
+            document.getElementById('editTransTreasuryLabel').textContent = CUST_VAULT_LABELS[vKey] || CUST_VAULT_LABELS.main;
+
+            document.getElementsByName('editTransType').forEach(r => {
+                r.checked = (r.value === v.type);
+            });
+
+            window.SerajUI.openModal('editVoucherModal');
+        }
+
+        function saveEditedVoucher(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            if (!window.SerajAuth.canAccess('reverse_treasury_move')) {
+                return SerajAlert('⛔ تعديل السندات مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
+            if (!activeSelectedVoucher) return;
+
+            const v = activeSelectedVoucher;
+            const c = customersDB.find(x => String(x.id) === String(currentActiveCustomerId));
+            if (!c) return;
+
+            const newAmount = round2(document.getElementById('editTransAmount').value);
+            const newDate = document.getElementById('editTransDate').value || window.Utils.getLocalDateString();
+            const newNotes = document.getElementById('editTransNotes').value.trim();
+            const newTreasury = document.getElementById('editTransTreasurySelect').value || 'main';
+            const newType = document.querySelector('input[name="editTransType"]:checked')?.value || 'receipt';
+
+            if (newAmount <= 0) return SerajAlert('أدخل مبلغاً صحيحاً أكبر من الصفر!', 'error');
+
+            let nextAllocs = [];
+            if (newType === 'receipt' && Array.isArray(v.allocatedInvoices) && v.allocatedInvoices.length > 0) {
+                if (v.allocatedInvoices.length === 1) {
+                    nextAllocs = [{ ...v.allocatedInvoices[0], deducted: newAmount, amount: newAmount }];
+                } else if (Math.abs(newAmount - round2(v.amount)) < 0.009) {
+                    nextAllocs = [...v.allocatedInvoices];
+                }
+            }
+
+            // تحديث السند في عقدة customer_vouchers المستقلة
+            const list = DB.getCustomerVouchers(true);
+            const idx = list.findIndex(x => x && String(x.id) === String(v.id));
+            const nowTs = Date.now();
+            const updatedObj = {
+                ...(idx > -1 ? list[idx] : v),
+                id: String(v.id),
+                customerId: String(c.id),
+                customerName: c.name,
+                type: newType,
+                amount: newAmount,
+                notes: newNotes,
+                treasury: newTreasury,
+                vault: newTreasury,
+                date: newDate,
+                timestamp: window.Utils.alignTimestampWithDate(newDate, v.timestamp || nowTs),
+                allocatedInvoices: nextAllocs,
+                _lastModified: nowTs,
+                _lastModifiedBy: localStorage.getItem('seraj_device_name') || 'كاشير 1'
+            };
+
+            if (idx > -1) list[idx] = updatedObj;
+            else list.unshift(updatedObj);
+            DB.saveCustomerVouchers(list);
+
+            // عكس حركة الخزينة القديمة وتسجيل الجديدة آلياً عبر المحرك المركزي
+            DB.recordTreasuryTransaction({
+                id: String(v.id),
+                type: newType === 'receipt' ? 'customer_receipt' : 'customer_payment',
+                vault: newTreasury,
+                amountAdd: newType === 'receipt' ? newAmount : 0,
+                amountDeduct: newType === 'payment' ? newAmount : 0,
+                amount: newAmount,
+                notes: `سند ${newType === 'receipt' ? 'تحصيل' : 'سحب'} رقم ${v.id}: ${c.name.trim()}${newNotes ? ' - ' + newNotes : ''}`,
+                date: newDate,
+                allocatedInvoices: nextAllocs,
+                customerId: String(c.id),
+                customer: c.name.trim()
+            });
+
+            safeLoadData();
+            closeModals();
+            const updatedCustomer = DB.calculateCustomerBalances(currentActiveCustomerId);
+            if (updatedCustomer) {
+                updateAccountSummary(updatedCustomer);
+                renderAccountTransactions(updatedCustomer);
+            }
+            SerajAlert('✅ تم تعديل السند وإعادة التوزيع وتحديث الخزينة بنجاح!', 'success');
+        }
+
+        async function deleteVoucherFromInline(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            closeAllMenus();
+            if (!window.SerajAuth.canAccess('delete_treasury_move')) {
+                return SerajAlert('⛔ حذف السندات وعكس حركات الخزينة مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
+            if (!activeSelectedVoucher) return;
+
+            const v = activeSelectedVoucher;
+            const ok = await SerajConfirm(`هل أنت متأكد من حذف السند رقم ${v.id} بقيمة ${round2(v.amount).toFixed(2)} ج؟\n(سيتم عكس حركته بالخزينة وإعادة توزيع مديونية العميل تلقائياً)`);
+            if (!ok) return;
+
+            DB.deleteCustomerVoucher(String(v.id));
+            DB.deleteItem('treasury_moves', String(v.rawTreasuryId || v.id), 'soft');
+
+            safeLoadData();
+            const updatedCustomer = DB.calculateCustomerBalances(currentActiveCustomerId);
+            if (updatedCustomer) {
+                updateAccountSummary(updatedCustomer);
+                renderAccountTransactions(updatedCustomer);
+            }
+            SerajAlert('✅ تم حذف السند وعكس حركته بالخزينة بنجاح.', 'success');
+        }
+
+        function openViewModalFromOpt(e) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            closeAllMenus();
+            if (!activeSelectedInvoice) return;
+            const item = activeSelectedInvoice;
+
+            if (item.type === 'voucher') {
+                const t = item.rawObj;
+                let devHtml = '';
+                if (t._device) {
+                    const editTag = (t._lastModifiedBy && t._lastModifiedBy !== t._device)
+                        ? `<br>✏️ آخر تعديل: <b>${safeHTML(t._lastModifiedBy)}</b>`
+                        : '';
+                    devHtml = `<div class="color-customer" style="margin-top: 10px; font-size: 13px; padding: 8px; border-radius: 8px; border: 1px solid var(--neon-border-soft); background: var(--card-bg-alt);">💻 بواسطة: <b>${safeHTML(t._device)}</b>${editTag}</div>`;
+                }
+
+                document.getElementById('viewModalTitle').innerHTML = `تفاصيل السند رقم <span class="invoice-number">${safeHTML(t.id)}</span>`;
+                document.getElementById('viewModalContent').innerHTML = `
+                    <div style="text-align: right; line-height: 1.9; font-weight: bold;">
+                        <div>النوع: <span>${t.type === 'receipt' ? 'تحصيل نقدية (له/تسديد)' : 'مديونية / سحب (عليه)'}</span></div>
+                        <div>المبلغ: <span class="${t.type === 'receipt' ? 'val-green' : 'val-red'}" dir="ltr">${round2(t.amount).toFixed(2)} ج</span></div>
+                        <div>التاريخ: <span>${safeHTML(t.date || '')}</span></div>
+                        <div>الخزينة: <span>${safeHTML(CUST_VAULT_LABELS[t.treasury || t.vault || 'main'] || 'كاش')}</span></div>
+                        <div>الملاحظات: <span>${safeHTML(t.notes || '---')}</span></div>
+                        ${devHtml}
+                    </div>
+                `;
+            } else {
+                const inv = item.rawObj;
+                const rowsHtml = (inv.items || []).map(it => {
+                    const price = round2(it.price);
+                    const qty = window.Utils.round4(it.qty);
+                    const lineTot = round2(it.total !== undefined ? it.total : (qty * price));
+                    return `
+                        <tr>
+                            <td style="text-align: right;">${safeHTML(it.name || 'صنف')}</td>
+                            <td dir="ltr">${qty}</td>
+                            <td dir="ltr">${price.toFixed(2)}</td>
+                            <td dir="ltr">${lineTot.toFixed(2)}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                let devHtml = '';
+                if (inv._device) {
+                    const editTag = (inv._lastModifiedBy && inv._lastModifiedBy !== inv._device)
+                        ? ` | ✏️ تعديل: <b>${safeHTML(inv._lastModifiedBy)}</b>`
+                        : '';
+                    devHtml = `<div class="color-customer" style="margin-bottom: 10px; font-size: 13px;">💻 سُجلت بواسطة: <b>${safeHTML(inv._device)}</b>${editTag}</div>`;
+                }
+
+                const finalReq = DB._computeInvoiceNetTotal(inv);
+                const remVal = round2(inv.calculatedRemaining ?? inv.remaining ?? 0);
+
+                document.getElementById('viewModalTitle').innerHTML = `تفاصيل الفاتورة <span class="invoice-number">${safeHTML(inv.invoiceNo || inv.id)}</span>`;
+                document.getElementById('viewModalContent').innerHTML = `
+                    <div style="margin-bottom: 10px; display: flex; justify-content: space-between; font-weight: bold;">
+                        <span>العميل: <span class="tag-customer">${safeHTML(inv.customer || 'نقدي')}</span></span>
+                        <span>التاريخ: ${safeHTML(inv.date || '')}</span>
+                    </div>
+                    ${devHtml}
+                    <div class="table-wrapper" style="max-height: 40vh; margin-bottom: 12px;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="text-align: right;">الصنف</th>
+                                    <th>الكمية</th>
+                                    <th>السعر</th>
+                                    <th>الإجمالي</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rowsHtml}</tbody>
+                        </table>
+                    </div>
+                    <div style="text-align: left; font-size: 15px; font-weight: bold; line-height: 1.8;">
+                        <div>الصافي: <span class="color-customer" dir="ltr">${finalReq.toFixed(2)} ج</span></div>
+                        <div>المدفوع: <span class="badge-paid" dir="ltr">${round2(inv.paid).toFixed(2)} ج</span></div>
+                        <div>المتبقي: <span class="badge-unpaid" dir="ltr">${remVal.toFixed(2)} ج</span></div>
+                    </div>
+                `;
+            }
+            window.SerajUI.openModal('invoiceViewModal');
+        }
+
+        // =========================================================================
+        // الطباعة (فصل 80mm عن A4) و PDF (عبر downloadRealPDF) و Excel (حفظ الموبايل كـ String)
+        // =========================================================================
+        function handlePrintAction(action) {
+            closeAllMenus();
+            const isList = document.getElementById('customers-list-view').classList.contains('active-view');
+            if (isList) {
+                if (action === 'a4' || action === 'thermal') printCustomersListA4();
+                else if (action === 'pdf_export') exportCustomersListPDF();
+            } else {
+                if (action === 'thermal') printThermalStatement();
+                else if (action === 'a4') printA4Statement();
+                else if (action === 'pdf_export') exportPdfStatement();
+            }
+        }
+
+        function _buildCustomersListReportHTML() {
+            if (!customersDB || customersDB.length === 0) return null;
+            const brand = window.PrintManager.getShopBranding();
+            let totalDebt = 0;
+            let totalCredit = 0;
+
+            const rowsHtml = customersDB.map((c, idx) => {
+                const netVal = round2(c.netBalanceVal || 0);
+                const isDebt = Boolean(c.isNetDebt && netVal > 0.009);
+                if (isDebt) totalDebt = round2(totalDebt + netVal);
+                else if (netVal > 0.009) totalCredit = round2(totalCredit + netVal);
+
+                const balClass = isDebt ? 'val-red' : 'val-green';
+                const balLabel = netVal > 0.009 ? (isDebt ? `${netVal.toFixed(2)} (عليه)` : `${netVal.toFixed(2)} (له)`) : '0.00 (صافي)';
+                return `
+                    <tr>
+                        <td>${idx + 1}</td>
+                        <td style="text-align: right;">${safeHTML(c.name || '')}</td>
+                        <td dir="ltr">${safeHTML(c.phone || '---')}</td>
+                        <td class="${balClass}">${balLabel}</td>
+                        <td>${safeHTML(c.lastActivityDate || 'لا يوجد')}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            return `
+                <div dir="rtl" style="background:#fff; color:#000; padding:10px; font-family:Tahoma, Arial, sans-serif;">
+                    <div style="text-align:center; border-bottom:3px solid #000; padding-bottom:10px; margin-bottom:14px;">
+                        <h1 style="margin:0; font-size:24px;">${safeHTML(brand.shopName)} — قائمة حسابات العملاء</h1>
+                        ${brand.shopPhone ? `<div style="font-size:13px; margin-top:3px;">ت: ${safeHTML(brand.shopPhone)}</div>` : ''}
+                        <div style="font-size:14px; font-weight:bold; margin-top:4px;">التاريخ: ${safeHTML(window.Utils.getLocalDateString())} | عدد العملاء: ${customersDB.length}</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>م</th>
+                                <th style="text-align:right;">العميل</th>
+                                <th>الموبايل</th>
+                                <th>الرصيد</th>
+                                <th>آخر معاملة</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                    <div style="width:100%; max-width:360px; margin-right:auto; border:2px solid #000; border-radius:6px; padding:10px; margin-top:14px; background:#f8fafc;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>إجمالي المديونيات (عليه):</span><strong class="val-red">${totalDebt.toFixed(2)} ج</strong></div>
+                        <div style="display:flex; justify-content:space-between;"><span>إجمالي الأرصدة الدائنة (له):</span><strong class="val-green">${totalCredit.toFixed(2)} ج</strong></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function printCustomersListA4() {
+            const reportHtml = _buildCustomersListReportHTML();
+            if (!reportHtml) return SerajAlert('لا يوجد عملاء للطباعة!', 'error');
+            window.PrintManager.printA4HTML(reportHtml, 'قائمة حسابات العملاء');
+        }
+
+        function exportCustomersListPDF() {
+            const reportHtml = _buildCustomersListReportHTML();
+            if (!reportHtml) return SerajAlert('لا يوجد عملاء للتصدير!', 'error');
+            window.Utils.downloadRealPDF(reportHtml, `قائمة_العملاء_${window.Utils.getLocalDateString()}.pdf`);
+        }
+
+        function exportPdfStatement() {
+            if (!currentActiveCustomerId) return SerajAlert('لم يتم تحديد عميل!', 'error');
+            const c = DB.calculateCustomerBalances(currentActiveCustomerId);
+            if (!c) return;
+            renderStatementTable(c);
+            const durationText = document.getElementById('currentDurationLabelOutside')?.textContent || 'مدى العمل';
+            window.PrintManager.exportStatementToPDF(c, durationText, 'statementTableBody', false);
+        }
+
+        function printA4Statement() {
+            if (!currentActiveCustomerId) return SerajAlert('لم يتم تحديد عميل!', 'error');
+            const c = DB.calculateCustomerBalances(currentActiveCustomerId);
+            if (!c) return;
+            renderStatementTable(c);
+            const durationText = document.getElementById('currentDurationLabelOutside')?.textContent || 'مدى العمل';
+            const tableEl = document.getElementById('printableStatementTable');
+            const infoBox = `
+                <div style="display:flex; justify-content:space-between; border:2px solid #000; border-radius:6px; padding:10px; margin-bottom:12px; font-weight:bold;">
+                    <div>العميل: ${safeHTML(c.name)} ${c.phone ? `(${safeHTML(c.phone)})` : ''}</div>
+                    <div>الفترة: ${safeHTML(durationText)}</div>
+                </div>
+            `;
+            window.PrintManager.printA4HTML(infoBox + (tableEl ? tableEl.outerHTML : ''), `كشف حساب عميل - ${c.name}`);
+        }
+
+        function printThermalStatement() {
+            if (!currentActiveCustomerId) return SerajAlert('لم يتم تحديد عميل!', 'error');
+            const c = DB.calculateCustomerBalances(currentActiveCustomerId);
+            if (!c) return;
+
+            const brand = window.PrintManager.getShopBranding();
+            const stmt = DB.getCustomerStatement(c.id, currentStatementDuration, customStartDate, customEndDate);
+            if (!stmt) return;
+
+            let rowsHtml = '';
+            if (currentStatementDuration !== 'allTime' && (stmt.prevAleih > 0 || stmt.prevLeh > 0)) {
+                const prevNet = round2(stmt.prevAleih - stmt.prevLeh);
+                rowsHtml += `<div style="border-bottom:1px dashed #000; padding:4px 0; font-weight:bold;">رصيد سابق: ${prevNet > 0 ? ('عليه ' + prevNet.toFixed(2)) : ('له ' + Math.abs(prevNet).toFixed(2))}</div>`;
+            }
+
+            stmt.rows.forEach(r => {
+                const cleanTitle = String(r.title || '').replace(/<[^>]*>?/gm, '');
+                const notePart = (r.notes && r.notes !== '---') ? ` (${r.notes})` : '';
+                rowsHtml += `
+                    <div style="border-bottom:1px dotted #333; padding:4px 0; font-size:12px;">
+                        <div style="font-weight:bold;">${safeHTML(cleanTitle + notePart)}</div>
+                        <div style="display:flex; justify-content:space-between;">
+                            <span>${safeHTML(r.date || '')}</span>
+                            <span dir="ltr">عليه: ${round2(r.aleih).toFixed(2)} | له: ${round2(r.leh).toFixed(2)}</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            const net = round2(stmt.netDebt);
+            const netText = net > 0.009 ? `عليه مديونية: ${Math.abs(net).toFixed(2)}` : (net < -0.009 ? `له رصيد: ${Math.abs(net).toFixed(2)}` : 'الرصيد مصفّر (0.00)');
+
+            const docHtml = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>كشف حساب ${safeHTML(c.name)}</title><style>@page{size:80mm auto;margin:0;}body{margin:0;padding:4mm 2mm;width:74mm;box-sizing:border-box;font-family:Tahoma,Arial,sans-serif;font-size:13px;color:#000;background:#fff;}</style></head><body>
+                <div style="text-align:center; border-bottom:2px dashed #000; padding-bottom:6px; margin-bottom:8px;">
+                    <div style="font-size:18px; font-weight:bold;">${safeHTML(brand.shopName)}</div>
+                    ${brand.shopPhone ? `<div>ت: ${safeHTML(brand.shopPhone)}</div>` : ''}
+                    <div style="font-weight:bold;">كشف حساب عميل</div>
+                </div>
+                <div style="font-weight:bold; margin-bottom:6px;">
+                    <div>العميل: ${safeHTML(c.name)}</div>
+                    <div>التاريخ: ${safeHTML(window.Utils.getLocalDateString())}</div>
+                </div>
+                ${rowsHtml}
+                <div style="border-top:2px dashed #000; margin-top:8px; padding-top:6px; font-weight:bold;">
+                    <div>إجمالي عليه: ${stmt.totalAleih.toFixed(2)} | إجمالي له: ${stmt.totalLeh.toFixed(2)}</div>
+                    <div style="font-size:15px; margin-top:4px;">${netText}</div>
+                </div>
+                <div style="text-align:center; margin-top:10px; border-top:1px dashed #000; padding-top:6px;">${safeHTML(brand.footerNote)}</div>
+            </body></html>`;
+
+            window.PrintManager._printHtmlViaSafeIframe(docHtml);
+        }
+
+        function exportExcel() {
+            closeAllMenus();
+            const isList = document.getElementById('customers-list-view').classList.contains('active-view');
+            if (isList) {
+                const cleanRows = customersDB.map(c => {
+                    const bal = round2(c.balance);
+                    const status = bal < -0.009 ? 'عليه' : (bal > 0.009 ? 'له' : 'صافي');
+                    return {
+                        'العميل': String(c.name || ''),
+                        'الموبايل': String(c.phone || ''),
+                        'الرصيد': Number(Math.abs(bal).toFixed(2)),
+                        'الحالة': status,
+                        'آخر معاملة': String(c.lastActivityDate || 'لا يوجد')
+                    };
+                });
+                window.PrintManager.exportToExcel(cleanRows, `قائمة_العملاء_${window.Utils.getLocalDateString()}`);
+            } else {
+                const c = DB.calculateCustomerBalances(currentActiveCustomerId);
+                if (!c) return SerajAlert('لم يتم تحديد عميل!', 'error');
+                renderStatementTable(c);
+                const durationText = document.getElementById('currentDurationLabelOutside')?.textContent || 'مدى العمل';
+                window.PrintManager.exportStatementToExcel(c, durationText, 'statementTableBody', false);
+            }
+        }
+
+        function triggerExcelImport() {
+            closeAllMenus();
+            const inp = document.getElementById('excelImportInput');
+            inp.value = '';
+            inp.click();
+        }
+
+        function importCustomersExcel(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (typeof XLSX === 'undefined') return SerajAlert('مكتبة Excel غير محملة بعد.', 'error');
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, { type: 'array', raw: false });
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+
+                    if (!json || json.length === 0) return SerajAlert('ملف الإكسيل فارغ.', 'error');
+
+                    let importedCount = 0;
+                    const localToday = window.Utils.getLocalDateString();
+
+                    json.forEach(item => {
+                        const name = window.cleanExcelText(item['العميل'] || item['اسم العميل'] || item['الاسم'] || item['name'] || '');
+                        // حفظ الموبايل كـ String صريح
+                        const phone = String(item['الموبايل'] ?? item['رقم الموبايل'] ?? item['phone'] ?? '').trim();
+                        const rawBalStr = String(item['الرصيد النهائي'] ?? item['الرصيد'] ?? item['balance'] ?? '0');
+                        const statusStr = String(item['الحالة'] || item['النوع'] || '').trim();
+                        const balance = parseFloat(rawBalStr.replace(/[^\d.\-]/g, '')) || 0;
+
+                        if (!name || name === 'undefined') return;
+                        const normName = window.Utils.normalizeName(name);
+                        const exists = customersDB.some(c => window.Utils.normalizeName(c.name) === normName);
+                        if (!exists) {
+                            const isDebt = statusStr.includes('عليه') || rawBalStr.includes('عليه') || (!statusStr.includes('له') && !rawBalStr.includes('له') && balance < 0);
+                            const openingVal = Math.abs(balance) > 0.009 ? (isDebt ? Math.abs(balance) : -Math.abs(balance)) : 0;
+                            customersDB.push({
+                                id: window.Utils.generateUniqueId('C'),
+                                _cloudKey: window.Utils.generateUUID('CUST'),
+                                name: name,
+                                phone: phone,
+                                openingBalance: round2(openingVal),
+                                createdAt: localToday,
+                                balance: 0,
+                                _lastModified: Date.now()
+                            });
+                            importedCount++;
+                        }
+                    });
+
+                    if (importedCount > 0) {
+                        DB.saveCustomers(customersDB);
+                        safeLoadData();
+                        renderCustomersList();
+                        SerajAlert(`✅ تم استيراد ${importedCount} عميل بنجاح!`, 'success');
+                    } else {
+                        SerajAlert('لم يتم استيراد أي عملاء جدد (ربما جميعهم مسجلون مسبقاً).', 'info');
+                    }
+                } catch (err) {
+                    console.error('Customer Excel Import Error:', err);
+                    SerajAlert('حدث خطأ أثناء قراءة ملف الإكسيل.', 'error');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // =========================================================================
+        // بوابة التشغيل بعد SerajMegaDB.ready + مستمعو popstate و seraj:updated
+        // =========================================================================
+        async function initCustomersPage() {
+            await window.SerajMegaDB.ready;
+            DB.applySavedTheme();
+            window.SerajAuth.applyRoleGuards();
+            updatePageBranding();
+            safeLoadData();
+            renderCustomersList();
+
+            const thermalOpt = document.getElementById('optThermalPrint');
+            if (thermalOpt) thermalOpt.style.display = 'none';
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initCustomersPage();
+        });
+
+        window.addEventListener('popstate', () => {
+            if (window.SerajUI._modalStack.length > 0) return;
+            if (document.getElementById('customer-statement-view').classList.contains('active-view') ||
+                document.getElementById('customer-account-view').classList.contains('active-view')) {
+                goBackSmart(null, true);
+            }
+        });
+
+        window.addEventListener('seraj:updated', (e) => {
+            const col = e && e.detail ? e.detail.collection : null;
+            if (!col || ['all', 'customers', 'customer_vouchers', 'sales_invoices', 'treasury_moves', 'store_settings'].includes(col)) {
+                updatePageBranding();
+                safeLoadData();
+                if (document.getElementById('customers-list-view').classList.contains('active-view')) {
+                    renderCustomersList();
+                } else if (currentActiveCustomerId) {
+                    const activeCust = DB.calculateCustomerBalances(currentActiveCustomerId);
+                    if (activeCust) {
+                        updateAccountSummary(activeCust);
+                        renderAccountTransactions(activeCust);
+                        if (document.getElementById('customer-statement-view').classList.contains('active-view')) {
+                            renderStatementTable(activeCust);
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

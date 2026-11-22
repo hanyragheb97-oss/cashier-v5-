@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تقرير أرصدة العملاء</title>
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b0d1e">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="stylesheet" href="style.css">
+
+    <!-- المكتبات المحلية للعمل أوفلاين 100% -->
+    <script src="./libs/xlsx.full.min.js" defer></script>
+    <script src="./libs/html2pdf.bundle.min.js" defer></script>
+
+    <style>
+        .report-main-wrap {
+            max-width: 860px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 12px 12px 95px;
+            box-sizing: border-box;
+        }
+
+        .status-pill {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: bold;
+            background-color: var(--surface-subtle);
+            border: 1.5px solid var(--accent-red);
+            color: var(--accent-red);
+        }
+
+        .status-pill.credit {
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+
+        .report-total-footer td {
+            background-color: var(--table-header-bg);
+            border-top: 2px solid var(--neon-border);
+            padding: 14px 10px;
+            line-height: 1.9;
+            font-size: 15px;
+            font-weight: bold;
+        }
+
+        .capsule.locked-capsule {
+            opacity: 0.88;
+        }
+    </style>
+</head>
+<body class="page-records" onclick="closeAllMenus()">
+
+    <div class="header header-records">
+        <span>تقرير المبالغ المتبقية للعملاء</span>
+    </div>
+
+    <div class="report-main-wrap">
+        <div class="search-container">
+            <input type="text" id="searchInput" class="search-input seraj-search-input" placeholder="ابحث باسم العميل أو الموبايل..." oninput="debouncedRender()" onclick="event.stopPropagation()" autocomplete="off">
+        </div>
+
+        <div class="table-wrapper" id="pdf-wrapper" style="max-height: none;">
+            <table class="seraj-table">
+                <thead>
+                    <tr>
+                        <th style="width: 46%; text-align: right;">العميل</th>
+                        <th style="width: 24%;">الحالة</th>
+                        <th style="width: 30%;">الرصيد</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+                <tfoot>
+                    <tr class="report-total-footer">
+                        <td colspan="3">
+                            إجمالي المديونيات (عليه): <span id="grandDebt" class="val-red" dir="ltr">0.00</span> ج<br>
+                            إجمالي الأرصدة الدائنة (له): <span id="grandCredit" class="val-green" dir="ltr">0.00</span> ج<br>
+                            الصافي النهائي: <span id="netBalanceTotal" class="val-yellow" style="font-size: 19px;" dir="ltr">0.00</span> ج
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- الشريط السفلي الموحد -->
+    <div class="unified-bottom-bar" onclick="event.stopPropagation()">
+        <button type="button" class="header-back-btn" onclick="goBackSmart()">
+            <span class="arrow">⬅</span>
+            <span class="text">BACK</span>
+        </button>
+
+        <div class="bottom-capsules">
+            <div class="capsule locked-capsule" onclick="showAllTimeLockNotice(event)">
+                📅 <span>مدى العمل</span> <span style="margin-right: 4px;">🔒</span>
+            </div>
+
+            <div class="capsule print-btn" onclick="togglePrintOptions(event)">
+                🖨️ خيارات
+                <div class="dropdown-menu" id="floatingPrintMenu">
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('thermal')">🧾 طباعة حرارية (80mm)</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('a4')">🖨️ طباعة ورقة (A4)</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('pdf_export')">📄 مشاركة / تصدير PDF</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('excel_export')">📊 تصدير Excel</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="print_manager.js"></script>
+
+    <script>
+        let lastDisplayList = [];
+        let lastTotals = { grandDebt: 0, grandCredit: 0, netBalance: 0 };
+
+        const safeHTML = (v) => window.Utils.sanitizeHTML(v);
+        const round2 = (v) => window.Utils.round2(v);
+
+        function updatePageBranding() {
+            const brand = window.PrintManager ? window.PrintManager.getShopBranding() : { shopName: window.APP_BRAND_CONFIG.appName };
+            document.title = `تقرير أرصدة العملاء - ${brand.shopName}`;
+        }
+
+        function goBackSmart() {
+            localStorage.setItem('seraj_active_tab', 'العملاء');
+            window.location.href = 'smart_accountant.html';
+        }
+
+        function closeAllMenus() {
+            const prnt = document.getElementById('floatingPrintMenu');
+            if (prnt) prnt.style.display = 'none';
+        }
+
+        function togglePrintOptions(e) {
+            if (e) e.stopPropagation();
+            const m = document.getElementById('floatingPrintMenu');
+            const isVisible = m && m.style.display === 'block';
+            closeAllMenus();
+            if (m && !isVisible) m.style.display = 'block';
+        }
+
+        function showAllTimeLockNotice(e) {
+            if (e) e.stopPropagation();
+            closeAllMenus();
+            SerajAlert('تقرير الأرصدة والديون يعمل على (مدى العمل) دائماً لضمان شمول جميع الديون والأرصدة السابقة بدقة.', 'info');
+        }
+
+        const debouncedRender = window.Utils.debounce(function() {
+            renderTable();
+        }, 160);
+
+        // قراءة الأرصدة النهائية للعملاء من المحرك المركزي
+        function renderTable() {
+            const normQ = window.Utils.normalizeName(document.getElementById('searchInput')?.value || '');
+            const allCustomers = DB.getCustomers(false, false) || [];
+
+            const displayList = [];
+            let grandDebt = 0;
+            let grandCredit = 0;
+
+            allCustomers.forEach(c => {
+                if (!c || !c.name) return;
+                if (normQ) {
+                    const hay = `${window.Utils.normalizeName(c.name)} ${window.Utils.normalizeName(c.phone || '')}`;
+                    if (!hay.includes(normQ)) return;
+                }
+
+                const net = round2(c.balance);
+                if (Math.abs(net) < 0.01) return;
+
+                // في db.js: السالب (isNetDebt) = العميل عليه مديونية للمحل
+                const isDebt = (net < 0 || c.isNetDebt === true);
+                const absVal = Math.abs(net);
+
+                if (isDebt) grandDebt = round2(grandDebt + absVal);
+                else grandCredit = round2(grandCredit + absVal);
+
+                displayList.push({
+                    name: String(c.name).trim(),
+                    phone: String(c.phone || '').trim(),
+                    netVal: absVal,
+                    isDebt: isDebt,
+                    statusText: isDebt ? 'عليه' : 'له',
+                    originalNet: isDebt ? -absVal : absVal
+                });
+            });
+
+            // ترتيب تصاعدي على originalNet ليظهر الأعلى مديونية أولاً
+            displayList.sort((a, b) => a.originalNet - b.originalNet);
+            lastDisplayList = displayList;
+
+            const tbody = document.getElementById('tableBody');
+            if (displayList.length === 0) {
+                lastTotals = { grandDebt: 0, grandCredit: 0, netBalance: 0 };
+                tbody.innerHTML = `<tr><td colspan="3" style="padding: 24px; color: var(--accent-green); font-size: 16px;">لا توجد ديون أو أرصدة قائمة للعملاء 👍</td></tr>`;
+                document.getElementById('grandDebt').textContent = '0.00';
+                document.getElementById('grandCredit').textContent = '0.00';
+                document.getElementById('netBalanceTotal').textContent = '0.00';
+                return;
+            }
+
+            tbody.innerHTML = displayList.map(item => `
+                <tr>
+                    <td style="text-align: right;">
+                        <div class="tag-customer">${safeHTML(item.name)}</div>
+                        ${item.phone ? `<span class="cell-meta" dir="ltr">${safeHTML(item.phone)}</span>` : ''}
+                    </td>
+                    <td><span class="status-pill ${item.isDebt ? '' : 'credit'}">${item.statusText}</span></td>
+                    <td class="${item.isDebt ? 'val-red' : 'val-green'}" style="font-size: 18px;" dir="ltr">${item.netVal.toFixed(2)}</td>
+                </tr>
+            `).join('');
+
+            const netBalance = round2(grandDebt - grandCredit);
+            lastTotals = { grandDebt, grandCredit, netBalance };
+
+            document.getElementById('grandDebt').textContent = grandDebt.toFixed(2);
+            document.getElementById('grandCredit').textContent = grandCredit.toFixed(2);
+            document.getElementById('netBalanceTotal').textContent = netBalance.toFixed(2);
+        }
+
+        // =========================================================================
+        // الطباعة (فصل 80mm عن A4) و PDF (downloadRealPDF) و Excel
+        // =========================================================================
+        function _buildA4ReportHTML() {
+            const brand = window.PrintManager.getShopBranding();
+            const todayStr = window.Utils.getLocalDateString();
+            const rowsHtml = lastDisplayList.map((item, idx) => `
+                <tr>
+                    <td>${idx + 1}</td>
+                    <td style="text-align: right;">${safeHTML(item.name)}</td>
+                    <td dir="ltr">${safeHTML(item.phone || '---')}</td>
+                    <td class="${item.isDebt ? 'val-red' : 'val-green'}">${item.statusText}</td>
+                    <td dir="ltr" class="${item.isDebt ? 'val-red' : 'val-green'}">${item.netVal.toFixed(2)}</td>
+                </tr>
+            `).join('');
+
+            return `
+                <div dir="rtl" style="background:#fff; color:#000; padding:10px; font-family:Tahoma, Arial, sans-serif;">
+                    <div style="text-align:center; border-bottom:3px solid #000; padding-bottom:10px; margin-bottom:14px;">
+                        <h1 style="margin:0; font-size:24px;">${safeHTML(brand.shopName)} — تقرير أرصدة العملاء</h1>
+                        ${brand.shopPhone ? `<div style="font-size:13px; margin-top:3px;">ت: ${safeHTML(brand.shopPhone)}</div>` : ''}
+                        <div style="font-size:14px; font-weight:bold; margin-top:4px;">مدى العمل (الكل) | التاريخ: ${safeHTML(todayStr)} | عدد الحسابات: ${lastDisplayList.length}</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>م</th>
+                                <th style="text-align:right;">اسم العميل</th>
+                                <th>الموبايل</th>
+                                <th>الحالة</th>
+                                <th>الرصيد</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                    <div style="width:100%; max-width:380px; margin-right:auto; border:2px solid #000; border-radius:6px; padding:10px; margin-top:14px; background:#f8fafc;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>إجمالي المديونيات (عليه):</span><strong class="val-red">${lastTotals.grandDebt.toFixed(2)} ج</strong></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>إجمالي الأرصدة الدائنة (له):</span><strong class="val-green">${lastTotals.grandCredit.toFixed(2)} ج</strong></div>
+                        <div style="display:flex; justify-content:space-between; border-top:1px solid #000; padding-top:6px;"><span>الصافي النهائي:</span><strong>${lastTotals.netBalance.toFixed(2)} ج</strong></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function printThermalReport() {
+            if (lastDisplayList.length === 0) return SerajAlert('لا توجد أرصدة للطباعة!', 'info');
+            const brand = window.PrintManager.getShopBranding();
+            const rowsHtml = lastDisplayList.map(item => `
+                <tr>
+                    <td style="text-align:right; padding:4px 2px; border-bottom:1px dotted #333;">${safeHTML(item.name)}</td>
+                    <td style="text-align:center; padding:4px 2px; border-bottom:1px dotted #333;">(${item.statusText})</td>
+                    <td style="text-align:left; padding:4px 2px; border-bottom:1px dotted #333;" dir="ltr">${item.netVal.toFixed(2)}</td>
+                </tr>
+            `).join('');
+
+            const docHtml = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>أرصدة العملاء</title><style>@page{size:80mm auto;margin:0;}body{margin:0;padding:4mm 2mm;width:74mm;box-sizing:border-box;font-family:Tahoma,Arial,sans-serif;font-size:12px;color:#000;background:#fff;}</style></head><body>
+                <div style="text-align:center; border-bottom:2px dashed #000; padding-bottom:6px; margin-bottom:8px;">
+                    <div style="font-size:17px; font-weight:bold;">${safeHTML(brand.shopName)}</div>
+                    <div style="font-weight:bold;">تقرير أرصدة العملاء (مدى العمل)</div>
+                    <div>${safeHTML(window.Utils.getLocalDateString())}</div>
+                </div>
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead><tr style="border-bottom:1px solid #000;"><th style="text-align:right;">العميل</th><th>الحالة</th><th style="text-align:left;">الرصيد</th></tr></thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+                <div style="border-top:2px dashed #000; margin-top:8px; padding-top:6px; font-weight:bold; line-height:1.6;">
+                    <div>إجمالي المديونيات (عليه): ${lastTotals.grandDebt.toFixed(2)} ج</div>
+                    <div>إجمالي الأرصدة (له): ${lastTotals.grandCredit.toFixed(2)} ج</div>
+                    <div style="font-size:14px;">الصافي النهائي: ${lastTotals.netBalance.toFixed(2)} ج</div>
+                </div>
+                <div style="text-align:center; margin-top:10px; border-top:1px dashed #000; padding-top:6px;">${safeHTML(brand.footerNote)}</div>
+            </body></html>`;
+            window.PrintManager._printHtmlViaSafeIframe(docHtml);
+        }
+
+        function handlePrintAction(action) {
+            closeAllMenus();
+            if (lastDisplayList.length === 0) return SerajAlert('لا توجد بيانات للطباعة أو التصدير!', 'info');
+
+            if (action === 'thermal') {
+                printThermalReport();
+            } else if (action === 'a4') {
+                window.PrintManager.printA4HTML(_buildA4ReportHTML(), 'تقرير أرصدة العملاء');
+            } else if (action === 'pdf_export') {
+                window.Utils.downloadRealPDF(_buildA4ReportHTML(), `Customer_Balances_${window.Utils.getLocalDateString()}.pdf`);
+            } else if (action === 'excel_export') {
+                const excelData = [
+                    ['اسم العميل', 'الموبايل', 'حالة الحساب', 'الرصيد (جنيه)'],
+                    ...lastDisplayList.map(item => [item.name, String(item.phone || ''), item.statusText, item.netVal]),
+                    [],
+                    ['إجمالي المديونيات (عليه)', '', '', lastTotals.grandDebt],
+                    ['إجمالي الأرصدة الدائنة (له)', '', '', lastTotals.grandCredit],
+                    ['الصافي النهائي', '', '', lastTotals.netBalance]
+                ];
+                window.PrintManager.exportToExcel(excelData, `Customer_Balances_${window.Utils.getLocalDateString()}`);
+            }
+        }
+
+        async function initPage() {
+            await window.SerajMegaDB.ready;
+            DB.applySavedTheme();
+            window.SerajAuth.applyRoleGuards();
+            updatePageBranding();
+            renderTable();
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initPage();
+        });
+
+        window.addEventListener('seraj:updated', (e) => {
+            const col = e && e.detail ? e.detail.collection : null;
+            if (!col || ['all', 'customers', 'customer_vouchers', 'sales_invoices', 'treasury_moves', 'store_settings'].includes(col)) {
+                updatePageBranding();
+                renderTable();
+            }
+        });
+
+        window.addEventListener('popstate', () => {
+            if (window.SerajUI._modalStack.length > 0) return;
+            goBackSmart();
+        });
+    </script>
+</body>
+</html>

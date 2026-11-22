@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>فواتير المبيعات الغير مسددة</title>
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b0d1e">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="stylesheet" href="style.css">
+
+    <!-- المكتبات المحلية للعمل أوفلاين 100% -->
+    <script src="./libs/xlsx.full.min.js" defer></script>
+    <script src="./libs/html2pdf.bundle.min.js" defer></script>
+
+    <style>
+        .report-main-wrap {
+            max-width: 860px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 12px 12px 95px;
+            box-sizing: border-box;
+        }
+
+        .invoice-struck-total {
+            font-size: 13px;
+            color: var(--text-muted);
+            text-decoration: line-through;
+            margin-bottom: 4px;
+            direction: ltr;
+        }
+
+        .remaining-pill {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 13px;
+            border: 1.5px solid var(--accent-red);
+            color: var(--accent-red);
+            background-color: var(--surface-subtle);
+            direction: ltr;
+        }
+
+        .report-total-footer td {
+            background-color: var(--table-header-bg);
+            border-top: 2px solid var(--neon-border);
+            padding: 15px 10px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .details-header-card {
+            background-color: var(--card-bg-alt);
+            border: 2px solid var(--neon-border);
+            border-radius: 14px;
+            padding: 12px 14px;
+            margin-bottom: 12px;
+            box-shadow: 0 0 14px var(--neon-glow);
+        }
+
+        .details-total-card {
+            background-color: var(--card-bg-alt);
+            border: 2px solid var(--neon-border);
+            border-radius: 14px;
+            padding: 12px 14px;
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .device-meta-box {
+            margin-top: 8px;
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px dashed var(--neon-border);
+            background-color: var(--surface-subtle);
+            font-size: 12px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body class="page-records" onclick="closeAllMenus()">
+
+    <!-- الشاشة 1: قائمة فواتير المبيعات الآجلة -->
+    <div id="invoices-list-view" class="view-section active-view">
+        <div class="header header-records">
+            <span>فواتير المبيعات الغير مسددة</span>
+        </div>
+
+        <div class="report-main-wrap">
+            <div class="search-container">
+                <input type="text" id="searchInput" class="search-input seraj-search-input" placeholder="ابحث باسم العميل أو رقم الفاتورة..." oninput="debouncedRender()" onclick="event.stopPropagation()" autocomplete="off">
+            </div>
+
+            <div class="table-wrapper" id="pdf-wrapper" style="max-height: none;">
+                <table class="seraj-table" id="mainReportTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 46%; text-align: right;">العميل / الفاتورة</th>
+                            <th style="width: 30%;">الفاتورة / المتبقي</th>
+                            <th style="width: 24%;">المدفوع</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                    <tfoot>
+                        <tr class="report-total-footer">
+                            <td colspan="3">
+                                إجمالي المستحقات المتبقية = <span id="grandTotal" class="val-red" dir="ltr">0.00</span> ج
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        <!-- الشريط السفلي الموحد للقائمة -->
+        <div class="unified-bottom-bar" onclick="event.stopPropagation()">
+            <button type="button" class="header-back-btn" onclick="goBackSmart()">
+                <span class="arrow">⬅</span>
+                <span class="text">BACK</span>
+            </button>
+
+            <div class="bottom-capsules">
+                <div class="capsule" onclick="toggleDurationMenu(event)">
+                    📅 <span id="currentDurationLabelOutside">آخر 7 أيام</span>
+                    <div class="dropdown-menu" id="durationDropdownOutside">
+                        <div class="dropdown-menu-item" onclick="filterByDate('اليوم', 'today')">اليوم</div>
+                        <div class="dropdown-menu-item" onclick="filterByDate('أمس', 'yesterday')">أمس</div>
+                        <div class="dropdown-menu-item" onclick="filterByDate('آخر 7 أيام', '7days')">آخر 7 أيام</div>
+                        <div class="dropdown-menu-item" onclick="filterByDate('هذا الشهر', 'this_month')">هذا الشهر</div>
+                        <div class="dropdown-menu-item" onclick="filterByDate('آخر 30 يوم', '30days')">آخر 30 يوم</div>
+                        <div class="dropdown-menu-item" onclick="filterByDate('الشهر الماضي', 'last_month')">الشهر الماضي</div>
+                        <div class="dropdown-menu-item" onclick="filterByDate('مدى العمل (الكل)', 'all_time')">مدى العمل (الكل)</div>
+                        <div class="dropdown-menu-item" onclick="openCustomDateModal()">📅 تاريخ مخصص...</div>
+                    </div>
+                </div>
+
+                <div class="capsule print-btn" onclick="togglePrintOptions(event)">
+                    🖨️ خيارات
+                    <div class="dropdown-menu" id="floatingPrintMenu">
+                        <div class="dropdown-menu-item" onclick="handlePrintAction('thermal')">🧾 طباعة حرارية (80mm)</div>
+                        <div class="dropdown-menu-item" onclick="handlePrintAction('a4')">🖨️ طباعة ورقة (A4)</div>
+                        <div class="dropdown-menu-item" onclick="handlePrintAction('pdf_export')">📄 مشاركة / تصدير PDF</div>
+                        <div class="dropdown-menu-item" onclick="handlePrintAction('excel_export')">📊 تصدير Excel</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- الشاشة 2: العرض المدمج لتفاصيل فاتورة المبيعات -->
+    <div id="invoice-details-view" class="view-section">
+        <div class="header header-records">
+            <span>عرض فاتورة المبيعات</span>
+        </div>
+
+        <div class="report-main-wrap">
+            <div id="invoiceViewHeaderArea" class="details-header-card"></div>
+
+            <div class="table-wrapper" style="max-height: none;">
+                <table class="seraj-table">
+                    <thead>
+                        <tr>
+                            <th style="text-align: right;">الصنف</th>
+                            <th>الكمية</th>
+                            <th>السعر</th>
+                            <th>الإجمالي</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invoiceViewItemsTable"></tbody>
+                </table>
+            </div>
+
+            <div id="invoiceViewTotalArea" class="details-total-card"></div>
+        </div>
+
+        <div class="unified-bottom-bar" onclick="event.stopPropagation()">
+            <button type="button" class="header-back-btn" onclick="goBackSmart()" style="width: 100%; flex-direction: row; gap: 8px;">
+                <span class="arrow">⬅</span>
+                <span class="text" style="font-size: 15px;">رجوع للقائمة</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- نافذة التاريخ المخصص -->
+    <div class="modal-overlay" id="customDateModal" onclick="window.SerajUI.closeModal('customDateModal')">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3>تحديد تاريخ مخصص</h3></div>
+            <div class="compact-row"><label>من تاريخ:</label><input type="date" id="dateFrom"></div>
+            <div class="compact-row"><label>إلى تاريخ:</label><input type="date" id="dateTo"></div>
+            <div class="compact-btns">
+                <button type="button" class="btn-close-ai" onclick="window.SerajUI.closeModal('customDateModal')">إلغاء</button>
+                <button type="button" class="btn-save-ai" onclick="applyCustomDate()">تطبيق البحث</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="print_manager.js"></script>
+
+    <script>
+        let currentDateFilter = '7days';
+        let currentDurationLabel = 'آخر 7 أيام';
+        let customDateFrom = null;
+        let customDateTo = null;
+        let unpaidInvoices = [];
+        let lastFilteredList = [];
+        let lastGrandTotal = 0;
+        let activeDetailsInvoiceId = null;
+
+        const safeHTML = (v) => window.Utils.sanitizeHTML(v);
+        const round2 = (v) => window.Utils.round2(v);
+        const round4 = (v) => window.Utils.round4(v);
+
+        function updatePageBranding() {
+            const brand = window.PrintManager ? window.PrintManager.getShopBranding() : { shopName: window.APP_BRAND_CONFIG.appName };
+            document.title = `فواتير المبيعات الغير مسددة - ${brand.shopName}`;
+        }
+
+        function switchView(viewId) {
+            document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active-view'));
+            document.getElementById(viewId).classList.add('active-view');
+            if (viewId === 'invoices-list-view') {
+                activeDetailsInvoiceId = null;
+            }
+        }
+
+        function goBackSmart(fromPopState = false) {
+            closeAllMenus();
+            if (document.getElementById('invoice-details-view').classList.contains('active-view')) {
+                if (!fromPopState && history.state && history.state.view === 'details') {
+                    history.back();
+                } else {
+                    switchView('invoices-list-view');
+                }
+            } else if (!fromPopState) {
+                localStorage.setItem('seraj_active_tab', 'المبيعات');
+                window.location.href = 'smart_accountant.html';
+            }
+        }
+
+        function closeAllMenus() {
+            ['durationDropdownOutside', 'floatingPrintMenu'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
+        }
+
+        function toggleDurationMenu(e) {
+            if (e) e.stopPropagation();
+            const m = document.getElementById('durationDropdownOutside');
+            const isVisible = m && m.style.display === 'block';
+            closeAllMenus();
+            if (m && !isVisible) m.style.display = 'block';
+        }
+
+        function togglePrintOptions(e) {
+            if (e) e.stopPropagation();
+            const m = document.getElementById('floatingPrintMenu');
+            const isVisible = m && m.style.display === 'block';
+            closeAllMenus();
+            if (m && !isVisible) m.style.display = 'block';
+        }
+
+        function checkDateFilter(itemDateVal) {
+            if (currentDateFilter === 'all_time') return true;
+            const itemIso = window.Utils.normalizeDateStr(itemDateVal);
+            if (!itemIso) return false;
+
+            const now = new Date();
+            const todayIso = window.Utils.getLocalDateString(now);
+
+            if (currentDateFilter === 'today') return itemIso === todayIso;
+            if (currentDateFilter === 'yesterday') {
+                const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+                return itemIso === window.Utils.getLocalDateString(y);
+            }
+            if (currentDateFilter === '7days') {
+                const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+                return itemIso >= window.Utils.getLocalDateString(d) && itemIso <= todayIso;
+            }
+            if (currentDateFilter === '30days') {
+                const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+                return itemIso >= window.Utils.getLocalDateString(d) && itemIso <= todayIso;
+            }
+            if (currentDateFilter === 'this_month') {
+                const firstM = window.Utils.getLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
+                return itemIso >= firstM && itemIso <= todayIso;
+            }
+            if (currentDateFilter === 'last_month') {
+                const lm = window.Utils.getLastMonthRange(now);
+                return itemIso >= lm.start && itemIso <= lm.end;
+            }
+            if (currentDateFilter === 'custom' && customDateFrom && customDateTo) {
+                return itemIso >= customDateFrom && itemIso <= customDateTo;
+            }
+            return false;
+        }
+
+        function filterByDate(label, val) {
+            currentDateFilter = val;
+            currentDurationLabel = label;
+            const outLbl = document.getElementById('currentDurationLabelOutside');
+            if (outLbl) outLbl.textContent = label;
+            closeAllMenus();
+            renderTable();
+        }
+
+        function openCustomDateModal() {
+            closeAllMenus();
+            window.SerajUI.openModal('customDateModal');
+        }
+
+        function applyCustomDate() {
+            const f = document.getElementById('dateFrom').value;
+            const t = document.getElementById('dateTo').value;
+            if (!f || !t) return SerajAlert('يرجى تحديد تاريخ البداية والنهاية.', 'error');
+            currentDateFilter = 'custom';
+            customDateFrom = f;
+            customDateTo = t;
+            currentDurationLabel = `${f} إلى ${t}`;
+            document.getElementById('currentDurationLabelOutside').textContent = 'تاريخ مخصص';
+            window.SerajUI.closeModal('customDateModal');
+            renderTable();
+        }
+
+        function loadDataFromDB() {
+            // تسوية سندات العملاء أولاً لضمان دقة computedRemaining
+            DB.calculateCustomerBalances();
+            const invoices = DB.getSalesInvoices(false) || [];
+            unpaidInvoices = [];
+
+            invoices.forEach(inv => {
+                if (!inv) return;
+                if (['quotation', 'quote', 'return', 'return_sale', 'sales_return', 'canceled'].includes(inv.type)) return;
+
+                const finalTotal = DB._computeInvoiceNetTotal(inv);
+                const remaining = round2(inv.computedRemaining !== undefined ? inv.computedRemaining : (inv.remaining || 0));
+
+                if (remaining > 0.009) {
+                    const invDate = window.Utils.normalizeDateStr(inv.date, inv.timestamp);
+                    const ts = window.Utils.getSafeTime(inv.timestamp || invDate) || 0;
+                    const customerName = String(inv.customer || inv.customerName || 'عميل نقدي').trim();
+                    unpaidInvoices.push({
+                        id: inv.id,
+                        invoiceNo: String(inv.invoiceNo || inv.id || ''),
+                        date: invDate,
+                        timestamp: ts,
+                        customer: customerName,
+                        total: finalTotal,
+                        paid: round2(inv.paid),
+                        remaining: remaining
+                    });
+                }
+            });
+
+            unpaidInvoices.sort((a, b) => {
+                if (b.timestamp !== a.timestamp) return b.timestamp - a.timestamp;
+                return window.Utils.extractSerialNum(b.id) - window.Utils.extractSerialNum(a.id);
+            });
+            renderTable();
+        }
+
+        const debouncedRender = window.Utils.debounce(function() {
+            renderTable();
+        }, 160);
+
+        function renderTable() {
+            const normQ = window.Utils.normalizeName(document.getElementById('searchInput')?.value || '');
+            const tbody = document.getElementById('tableBody');
+            if (!tbody) return;
+
+            const filteredList = unpaidInvoices.filter(item => {
+                if (normQ) {
+                    const hay = `${window.Utils.normalizeName(item.customer)} ${window.Utils.normalizeName(item.invoiceNo)}`;
+                    if (!hay.includes(normQ)) return false;
+                }
+                return checkDateFilter(item.date || item.timestamp);
+            });
+
+            lastFilteredList = filteredList;
+
+            if (filteredList.length === 0) {
+                lastGrandTotal = 0;
+                tbody.innerHTML = `<tr><td colspan="3" style="padding: 24px; color: var(--accent-green); font-size: 16px;">جميع فواتير هذه الفترة مسددة بالكامل 👍</td></tr>`;
+                document.getElementById('grandTotal').textContent = '0.00';
+                return;
+            }
+
+            let grandTotalRemaining = 0;
+            tbody.innerHTML = filteredList.map(item => {
+                grandTotalRemaining = round2(grandTotalRemaining + item.remaining);
+                return `
+                    <tr class="unpaid-row" data-inv-id="${safeHTML(item.id)}">
+                        <td style="text-align: right;">
+                            <div class="tag-customer">${safeHTML(item.customer)}</div>
+                            <span class="cell-meta">فاتورة: <span class="invoice-number">${safeHTML(item.invoiceNo)}</span> | 📅 ${safeHTML(item.date)}</span>
+                            <span class="cell-meta val-red">الباقي: ${item.remaining.toFixed(2)} ج</span>
+                        </td>
+                        <td>
+                            <div class="invoice-struck-total">${item.total.toFixed(2)}</div>
+                            <div class="remaining-pill">${item.remaining.toFixed(2)} ج</div>
+                        </td>
+                        <td class="val-green" dir="ltr">${item.paid.toFixed(2)}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            lastGrandTotal = grandTotalRemaining;
+            document.getElementById('grandTotal').textContent = grandTotalRemaining.toFixed(2);
+
+            tbody.querySelectorAll('tr.unpaid-row[data-inv-id]').forEach(tr => {
+                const invId = tr.getAttribute('data-inv-id');
+                let startY = 0;
+                let moved = false;
+                tr.addEventListener('pointerdown', (e) => { startY = e.clientY; moved = false; });
+                tr.addEventListener('pointermove', (e) => { if (Math.abs(e.clientY - startY) > 12) moved = true; });
+                tr.addEventListener('pointerup', (e) => {
+                    if (moved) return;
+                    if (e.button !== undefined && e.button !== 0) return;
+                    openInvoiceDetails(invId);
+                });
+            });
+        }
+
+        function openInvoiceDetails(invoiceId, skipHistory = false) {
+            const invoicesDB = DB.getSalesInvoices(true) || [];
+            const inv = invoicesDB.find(i => i && String(i.id) === String(invoiceId));
+            if (!inv) return;
+
+            activeDetailsInvoiceId = inv.id;
+            const safeItems = inv.items || [];
+            const finalReq = DB._computeInvoiceNetTotal(inv);
+            const paid = round2(inv.paid);
+            const rem = round2(inv.computedRemaining !== undefined ? inv.computedRemaining : (inv.remaining || 0));
+            const custName = String(inv.customer || inv.customerName || 'نقدي').trim();
+            const invNo = String(inv.invoiceNo || inv.id || '');
+
+            const notesHtml = inv.notes
+                ? `<div class="color-notes" style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--neon-border-soft);">📝 ملاحظات: ${safeHTML(inv.notes)}</div>`
+                : '';
+
+            let deviceHtml = '';
+            if (inv._device) {
+                const editTag = (inv._lastModifiedBy && inv._lastModifiedBy !== inv._device)
+                    ? `<br><span class="val-yellow">✏️ آخر تعديل بواسطة: <b>${safeHTML(inv._lastModifiedBy)}</b></span>`
+                    : '';
+                deviceHtml = `<div class="device-meta-box color-customer">💻 سُجلت بواسطة: <b>${safeHTML(inv._device)}</b>${editTag}</div>`;
+            }
+
+            document.getElementById('invoiceViewHeaderArea').innerHTML = `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: bold;">
+                    <span>رقم الفاتورة: <strong class="invoice-number">${safeHTML(invNo)}</strong></span>
+                    <span>التاريخ: <strong>${safeHTML(inv.date || '')}</strong></span>
+                </div>
+                <div style="font-weight: bold;">العميل: <span class="tag-customer">${safeHTML(custName)}</span></div>
+                ${notesHtml}
+                ${deviceHtml}
+            `;
+
+            document.getElementById('invoiceViewItemsTable').innerHTML = safeItems.map(item => {
+                const price = round2(item.price);
+                const qty = round4(item.qty ?? item.quantity ?? 0);
+                const itemTot = round2(item.total !== undefined ? item.total : (price * qty));
+                return `
+                    <tr>
+                        <td style="text-align: right;">${safeHTML(item.name || 'صنف')}</td>
+                        <td dir="ltr">${qty}</td>
+                        <td dir="ltr">${price.toFixed(2)}</td>
+                        <td class="val-red" dir="ltr">${itemTot.toFixed(2)}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            document.getElementById('invoiceViewTotalArea').innerHTML = `
+                <span>الصافي: <span class="color-customer" dir="ltr">${finalReq.toFixed(2)} ج</span></span>
+                <span>المدفوع: <span class="val-green" dir="ltr">${paid.toFixed(2)} ج</span></span>
+                <span>المتبقي: <span class="val-red" dir="ltr">${rem.toFixed(2)} ج</span></span>
+            `;
+
+            switchView('invoice-details-view');
+            if (!skipHistory && !(history.state && history.state.view === 'details')) {
+                history.pushState({ view: 'details' }, '');
+            }
+        }
+
+        // =========================================================================
+        // الطباعة (80mm / A4) و PDF (downloadRealPDF) و Excel
+        // =========================================================================
+        function _buildA4ReportHTML() {
+            const brand = window.PrintManager.getShopBranding();
+            const todayStr = window.Utils.getLocalDateString();
+            const rowsHtml = lastFilteredList.map((item, idx) => `
+                <tr>
+                    <td>${idx + 1}</td>
+                    <td style="text-align: right;">${safeHTML(item.customer)}</td>
+                    <td dir="ltr">${safeHTML(item.invoiceNo)}</td>
+                    <td>${safeHTML(item.date)}</td>
+                    <td dir="ltr">${item.total.toFixed(2)}</td>
+                    <td dir="ltr" class="val-green">${item.paid.toFixed(2)}</td>
+                    <td dir="ltr" class="val-red">${item.remaining.toFixed(2)}</td>
+                </tr>
+            `).join('');
+
+            return `
+                <div dir="rtl" style="background:#fff; color:#000; padding:10px; font-family:Tahoma, Arial, sans-serif;">
+                    <div style="text-align:center; border-bottom:3px solid #000; padding-bottom:10px; margin-bottom:14px;">
+                        <h1 style="margin:0; font-size:24px;">${safeHTML(brand.shopName)} — فواتير المبيعات الغير مسددة</h1>
+                        ${brand.shopPhone ? `<div style="font-size:13px; margin-top:3px;">ت: ${safeHTML(brand.shopPhone)}</div>` : ''}
+                        <div style="font-size:14px; font-weight:bold; margin-top:4px;">الفترة: ${safeHTML(currentDurationLabel)} | التاريخ: ${safeHTML(todayStr)}</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>م</th>
+                                <th style="text-align:right;">العميل</th>
+                                <th>الفاتورة</th>
+                                <th>التاريخ</th>
+                                <th>الصافي</th>
+                                <th>المدفوع</th>
+                                <th>المتبقي (آجل)</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                    <div style="width:100%; max-width:360px; margin-right:auto; border:2px solid #000; border-radius:6px; padding:10px; margin-top:14px; background:#f8fafc;">
+                        <div style="display:flex; justify-content:space-between;"><span>إجمالي المستحقات المتبقية:</span><strong class="val-red">${lastGrandTotal.toFixed(2)} ج</strong></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function printThermalReport() {
+            if (lastFilteredList.length === 0) return SerajAlert('لا توجد فواتير آجلة للطباعة!', 'info');
+            const brand = window.PrintManager.getShopBranding();
+            const rowsHtml = lastFilteredList.map(item => `
+                <tr>
+                    <td style="text-align:right; padding:4px 2px; border-bottom:1px dotted #333;">${safeHTML(item.customer)}<br><small>#${safeHTML(item.invoiceNo)}</small></td>
+                    <td style="text-align:center; padding:4px 2px; border-bottom:1px dotted #333;" dir="ltr">${item.total.toFixed(2)}</td>
+                    <td style="text-align:left; padding:4px 2px; border-bottom:1px dotted #333; font-weight:bold;" dir="ltr">${item.remaining.toFixed(2)}</td>
+                </tr>
+            `).join('');
+
+            const docHtml = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فواتير آجلة</title><style>@page{size:80mm auto;margin:0;}body{margin:0;padding:4mm 2mm;width:74mm;box-sizing:border-box;font-family:Tahoma,Arial,sans-serif;font-size:12px;color:#000;background:#fff;}</style></head><body>
+                <div style="text-align:center; border-bottom:2px dashed #000; padding-bottom:6px; margin-bottom:8px;">
+                    <div style="font-size:17px; font-weight:bold;">${safeHTML(brand.shopName)}</div>
+                    <div style="font-weight:bold;">تقرير الفواتير الآجلة (مبيعات)</div>
+                    <div>${safeHTML(currentDurationLabel)}</div>
+                </div>
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead><tr style="border-bottom:1px solid #000;"><th style="text-align:right;">العميل/رقم</th><th>الإجمالي</th><th style="text-align:left;">المتبقي</th></tr></thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+                <div style="border-top:2px dashed #000; margin-top:8px; padding-top:6px; font-weight:bold; font-size:14px;">
+                    إجمالي المستحقات: ${lastGrandTotal.toFixed(2)} ج
+                </div>
+                <div style="text-align:center; margin-top:10px; border-top:1px dashed #000; padding-top:6px;">${safeHTML(brand.footerNote)}</div>
+            </body></html>`;
+            window.PrintManager._printHtmlViaSafeIframe(docHtml);
+        }
+
+        function handlePrintAction(action) {
+            closeAllMenus();
+            if (lastFilteredList.length === 0) return SerajAlert('لا توجد فواتير آجلة في هذه الفترة!', 'info');
+
+            if (action === 'thermal') {
+                printThermalReport();
+            } else if (action === 'a4') {
+                window.PrintManager.printA4HTML(_buildA4ReportHTML(), 'فواتير المبيعات الغير مسددة');
+            } else if (action === 'pdf_export') {
+                window.Utils.downloadRealPDF(_buildA4ReportHTML(), `Unpaid_Invoices_${window.Utils.getLocalDateString()}.pdf`);
+            } else if (action === 'excel_export') {
+                const excelData = lastFilteredList.map(item => ({
+                    'التاريخ': item.date,
+                    'رقم الفاتورة': item.invoiceNo,
+                    'اسم العميل': item.customer,
+                    'إجمالي الفاتورة': item.total,
+                    'المدفوع': item.paid,
+                    'المتبقي (آجل)': item.remaining
+                }));
+                window.PrintManager.exportToExcel(excelData, `Unpaid_Invoices_${window.Utils.getLocalDateString()}`);
+            }
+        }
+
+        async function initPage() {
+            await window.SerajMegaDB.ready;
+            DB.applySavedTheme();
+            window.SerajAuth.applyRoleGuards();
+            updatePageBranding();
+            loadDataFromDB();
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initPage();
+        });
+
+        window.addEventListener('seraj:updated', (e) => {
+            const col = e && e.detail ? e.detail.collection : null;
+            if (!col || ['all', 'sales_invoices', 'customers', 'customer_vouchers', 'treasury_moves', 'store_settings'].includes(col)) {
+                updatePageBranding();
+                loadDataFromDB();
+                if (activeDetailsInvoiceId && document.getElementById('invoice-details-view').classList.contains('active-view')) {
+                    openInvoiceDetails(activeDetailsInvoiceId, true);
+                }
+            }
+        });
+
+        window.addEventListener('popstate', () => {
+            if (window.SerajUI._modalStack.length > 0) return;
+            if (document.getElementById('invoice-details-view').classList.contains('active-view')) {
+                goBackSmart(true);
+            }
+        });
+    </script>
+</body>
+</html>

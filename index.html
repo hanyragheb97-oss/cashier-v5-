@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>الواجهة الرئيسية</title>
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b0d1e">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="icon" href="icon.png" type="image/png">
+    <link rel="apple-touch-icon" href="icon.png">
+    <link rel="stylesheet" href="style.css">
+
+    <style>
+        body.page-home {
+            background-color: var(--bg-dark-solid);
+            color: var(--text-main);
+            min-height: 100dvh;
+            width: 100vw;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .home-header {
+            background-color: var(--bg-dark-2);
+            padding: 12px 64px 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            border-bottom: 3px solid var(--neon-border);
+            box-shadow: 0 0 30px var(--neon-glow);
+            min-height: 64px;
+        }
+
+        .brand-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-size: 26px;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+            color: var(--text-main);
+            text-shadow: 0 0 14px var(--neon-glow);
+            text-align: center;
+        }
+
+        .home-container {
+            padding: 15px;
+            max-width: 820px;
+            margin: 0 auto;
+            height: calc(100dvh - 70px);
+            min-height: 540px;
+            box-sizing: border-box;
+            padding-bottom: 28px;
+        }
+
+        .home-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 0.95fr 1.1fr 1.1fr 1.1fr;
+            gap: 14px;
+            height: 100%;
+        }
+
+        .grid-item {
+            background-color: var(--card-bg);
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: 0 0 15px var(--neon-glow);
+            text-decoration: none;
+            color: var(--text-on-accent);
+            display: flex;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+            border: 2px solid var(--neon-border);
+            cursor: pointer;
+            position: relative;
+            height: 100%;
+            width: 100%;
+        }
+
+        .grid-item:active {
+            transform: scale(0.96);
+            box-shadow: 0 0 28px var(--neon-glow);
+            filter: brightness(1.12);
+        }
+
+        .grid-item.full-width {
+            grid-column: span 2;
+        }
+
+        .grid-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+        }
+
+        .grid-item .title {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-weight: bold;
+            font-size: 19px;
+            padding: 14px 8px 10px;
+            z-index: 2;
+            color: #ffffff;
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.95);
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.42) 65%, transparent 100%);
+        }
+
+        .grid-item.full-width .title {
+            font-size: 23px;
+            padding: 18px 8px 12px;
+        }
+
+        .menu-btn-themed {
+            position: fixed;
+            top: 10px;
+            right: 12px;
+            background-color: var(--card-bg);
+            border: 2px solid var(--neon-border);
+            color: var(--text-main);
+            border-radius: 12px;
+            width: 46px;
+            height: 46px;
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 9999;
+            box-shadow: 0 0 14px var(--neon-glow);
+            transition: transform 0.2s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .menu-btn-themed:active {
+            transform: scale(0.92);
+        }
+
+        @keyframes pulse-alert {
+            0% { box-shadow: 0 0 0 0 var(--neon-border); }
+            70% { box-shadow: 0 0 0 14px rgba(0, 0, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
+        }
+
+        .needs-setup {
+            animation: pulse-alert 2s infinite;
+        }
+
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background-color: var(--overlay-bg);
+            z-index: 9998;
+        }
+
+        .main-sidebar {
+            position: fixed;
+            top: 0;
+            right: -310px;
+            width: 290px;
+            max-width: 85vw;
+            height: 100%;
+            background-color: var(--bg-dark-2);
+            border-left: 3px solid var(--neon-border);
+            box-shadow: -6px 0 25px var(--shadow-dark);
+            z-index: 9999;
+            transition: right 0.28s ease;
+            padding: 18px 14px 30px;
+            box-sizing: border-box;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 9px;
+        }
+
+        .main-sidebar.open {
+            right: 0;
+        }
+
+        .sidebar-title {
+            color: var(--text-main);
+            text-align: center;
+            border-bottom: 2px solid var(--neon-border-soft);
+            padding-bottom: 12px;
+            margin: 0 0 4px;
+            font-size: 20px;
+        }
+
+        .session-badge-card {
+            background-color: var(--card-bg-alt);
+            border: 1.5px solid var(--neon-border);
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 13px;
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-bottom: 4px;
+        }
+
+        .sidebar-btn {
+            width: 100%;
+            padding: 11px 12px;
+            background-color: var(--card-bg);
+            color: var(--text-main);
+            border: 1.5px solid var(--neon-border);
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: bold;
+            text-align: right;
+            cursor: pointer;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 8px;
+            box-sizing: border-box;
+            transition: background-color 0.15s;
+        }
+
+        .sidebar-btn:active {
+            background-color: var(--row-active-bg);
+        }
+
+        .sidebar-btn.btn-accent-green {
+            background-color: var(--btn-save-bg);
+            border-color: var(--btn-save-border);
+            color: var(--btn-save-text);
+        }
+
+        .sidebar-btn.btn-accent-nav {
+            background-color: var(--btn-nav-bg);
+            border-color: var(--btn-nav-border);
+            color: var(--btn-nav-text);
+        }
+
+        .sidebar-btn.btn-accent-danger {
+            background-color: var(--btn-cancel-bg);
+            border-color: var(--btn-cancel-border);
+            color: var(--btn-cancel-text);
+        }
+
+        .login-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .login-tab-btn {
+            flex: 1;
+            padding: 10px 8px;
+            border-radius: 10px;
+            border: 1.5px solid var(--neon-border);
+            background-color: var(--card-bg-alt);
+            color: var(--text-main);
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .login-tab-btn.active {
+            background-color: var(--btn-nav-bg);
+            color: var(--btn-nav-text);
+            border-color: var(--btn-nav-border);
+        }
+
+        .voice-chip-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            max-height: 120px;
+            overflow-y: auto;
+            padding: 8px;
+            background-color: var(--bg-dark-1);
+            border: 1px solid var(--neon-border-soft);
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        .voice-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background-color: var(--card-bg-alt);
+            border: 1px solid var(--neon-border);
+            color: var(--text-main);
+            padding: 4px 10px;
+            border-radius: 14px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .voice-chip button {
+            background: transparent;
+            border: none;
+            color: var(--accent-red);
+            font-weight: bold;
+            cursor: pointer;
+            padding: 0 2px;
+            font-size: 14px;
+            flex: none;
+        }
+
+        .dict-rows-box {
+            max-height: 150px;
+            overflow-y: auto;
+            background-color: var(--bg-dark-1);
+            border: 1px solid var(--neon-border-soft);
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        .dict-row-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--neon-border-soft);
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .dict-row-item:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body class="page-home">
+
+    <!-- زر القائمة الجانبية -->
+    <button type="button" id="main-menu-btn" onclick="toggleSidebar()" class="menu-btn-themed" title="القائمة الرئيسية">☰</button>
+
+    <!-- خلفية القائمة الجانبية -->
+    <div id="sidebar-overlay" class="sidebar-overlay" onclick="closeSidebar()"></div>
+
+    <!-- القائمة الجانبية المنزلقة -->
+    <aside id="main-sidebar" class="main-sidebar">
+        <h2 class="sidebar-title">القائمة الرئيسية</h2>
+
+        <div id="session-badge-card" class="session-badge-card">
+            <div>🏪 <strong id="badge-shop-name">---</strong></div>
+            <div>👤 <span id="badge-role-device">---</span></div>
+            <div>📦 الباقة: <span id="badge-plan-name" class="val-green">---</span></div>
+        </div>
+
+        <button type="button" class="sidebar-btn owner-only" data-role="owner" onclick="openStoreSettingsModal()">⚙️ إعدادات المتجر والذكاء</button>
+        <button type="button" class="sidebar-btn" onclick="openPrinterSettingsModal()">🖨️ إعدادات الطابعة والفواتير</button>
+        <button type="button" class="sidebar-btn" onclick="openVoiceDictModal()">🎙️ قاموس الصوت والوحدات</button>
+        <a href="ai_assistant.html" class="sidebar-btn btn-accent-nav">🧠 المساعد الذكي</a>
+
+        <button type="button" class="sidebar-btn btn-accent-green" onclick="handleBackupData()">💾 حفظ / مشاركة Data.json</button>
+        <button type="button" class="sidebar-btn" onclick="handleBackupImages()">🖼️ نسخ الصور Images.json (اختياري)</button>
+        <button type="button" class="sidebar-btn owner-only" data-role="owner" onclick="triggerRestoreInput()">📂 استرجاع نسخة (Data / Images)</button>
+        <input type="file" id="restore-file-input" accept=".json" hidden onchange="handleRestoreFile(event)">
+
+        <!-- إعدادات النسخ اليومي الأوفلاين / Apps Script -->
+        <button type="button" class="sidebar-btn owner-only" data-role="owner" onclick="openAppsScriptModal()">📧 النسخ التلقائي اليومي (Email/GAS)</button>
+
+        <!-- أزرار الباقات السحابية (تُخفى تلقائياً في باقة offline_single) -->
+        <button type="button" id="btn-cloud-sync-now" class="sidebar-btn btn-accent-nav cloud-only-btn" onclick="handleManualCloudSync()">⚡ مزامنة فورية الآن</button>
+        <button type="button" id="btn-cloud-pull" class="sidebar-btn cloud-only-btn" onclick="handlePullFromCloud()">☁️ سحب ومطابقة بيانات المحل</button>
+        <button type="button" id="btn-cloud-archive" class="sidebar-btn btn-accent-danger owner-only cloud-only-btn" data-role="owner" onclick="triggerSystemArchive()">📦 الأرشفة السحابية (تفريغ مساحة)</button>
+
+        <button type="button" id="btn-support-wa" class="sidebar-btn btn-accent-green" style="display: none;" onclick="openSupportWhatsApp()">📞 الدعم الفني</button>
+        <button type="button" class="sidebar-btn btn-accent-danger" onclick="handleSignOut()">🚪 تسجيل الخروج</button>
+    </aside>
+
+    <!-- الرأس العلوي الديناميكي (White-Label 100%) -->
+    <header class="home-header">
+        <div class="brand-container">
+            <span id="mainBrandTitle">نظام الكاشير الذكي</span>
+        </div>
+    </header>
+
+    <!-- الشبكة الرئيسية للنظام (7 شاشات) -->
+    <main class="home-container">
+        <div class="home-grid">
+            <a href="store.html" class="grid-item full-width">
+                <img src="store.jpg" alt="مخزن المنتجات">
+                <div class="title">مخزن المنتجات</div>
+            </a>
+            <a href="purchases.html" class="grid-item">
+                <img src="buy.jpg" alt="شراء">
+                <div class="title">شراء</div>
+            </a>
+            <a href="sales.html" class="grid-item">
+                <img src="sales.jpg" alt="بيع">
+                <div class="title">بيع</div>
+            </a>
+            <a href="suppliers.html" class="grid-item">
+                <img src="suppliers.jpg" alt="الموردين">
+                <div class="title">الموردين</div>
+            </a>
+            <a href="customers.html" class="grid-item">
+                <img src="customers.jpg" alt="العملاء">
+                <div class="title">العملاء</div>
+            </a>
+            <a href="treasury.html" class="grid-item">
+                <img src="safe.jpg" alt="الخزنة">
+                <div class="title">الخزنة</div>
+            </a>
+            <a href="smart_accountant.html" class="grid-item">
+                <img src="ai.jpg" alt="المحاسب الذكي">
+                <div class="title">المحاسب الذكي</div>
+            </a>
+        </div>
+    </main>
+
+    <!-- ================= النوافذ المنبثقة ================= -->
+
+    <!-- 1. نافذة إعدادات المتجر والذكاء الاصطناعي -->
+    <div id="storeSettingsModal" class="modal-overlay" onclick="window.SerajUI.closeModal('storeSettingsModal')">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3>⚙️ إعدادات المتجر والذكاء</h3></div>
+            <div class="compact-row"><label>اسم المحل:</label><input type="text" id="set-store-name" placeholder="اسم المحل للفواتير"></div>
+            <div class="compact-row"><label>رقم الهاتف:</label><input type="text" id="set-store-phone" placeholder="رقم هاتف المحل" dir="ltr"></div>
+            <div class="compact-row"><label>العنوان:</label><input type="text" id="set-store-address" placeholder="عنوان المحل (اختياري)"></div>
+            <div class="compact-row"><label>اسم الجهاز:</label><input type="text" id="set-device-name" placeholder="مثال: المالك أو كاشير 1"></div>
+            <div class="compact-row"><label>رابط Gemini:</label><input type="text" id="settings_gemini_link" placeholder="https://gemini.google.com/..." dir="ltr"></div>
+            <div class="compact-row"><label>مفتاح AI:</label><input type="password" id="set-ai-key" placeholder="Gemini API Key" dir="ltr"></div>
+            <div class="compact-btns">
+                <button type="button" class="btn-close-ai" onclick="window.SerajUI.closeModal('storeSettingsModal')">إلغاء</button>
+                <button type="button" class="btn-save-ai" onclick="saveStoreSettingsModal()">💾 حفظ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. نافذة إعدادات الطابعة الشاملة (مع خانتي الهاتف وإظهار الرصيد حسب الدستور) -->
+    <div id="printerSettingsModal" class="modal-overlay" onclick="window.SerajUI.closeModal('printerSettingsModal')">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3>🖨️ إعدادات الطابعة والفواتير</h3></div>
+
+            <div class="compact-row">
+                <label>أمر الطباعة:</label>
+                <select id="printModeSelect">
+                    <option value="ask">سؤالي كل مرة</option>
+                    <option value="print">طباعة فورية تلقائياً</option>
+                    <option value="none">بدون طباعة تلقائية</option>
+                </select>
+            </div>
+
+            <div class="compact-row">
+                <label>نوع الاتصال:</label>
+                <select id="printer-type">
+                    <option value="usb">كابل USB / طباعة المتصفح</option>
+                    <option value="bluetooth">بلوتوث (RawBT صورة عالية الدقة)</option>
+                </select>
+            </div>
+
+            <div class="compact-row">
+                <label>اسم المحل:</label>
+                <input type="text" id="printerStoreName" placeholder="يظهر أعلى الفاتورة">
+            </div>
+
+            <div class="compact-row">
+                <label>هاتف المحل:</label>
+                <input type="text" id="printerStorePhone" placeholder="يظهر في ترويسة الفاتورة" dir="ltr">
+            </div>
+
+            <div class="compact-row">
+                <label>عنوان المحل:</label>
+                <input type="text" id="printerStoreAddress" placeholder="العنوان (اختياري)">
+            </div>
+
+            <div class="compact-row">
+                <label>إظهار الرصيد:</label>
+                <select id="printerShowBalance">
+                    <option value="yes">نعم — إظهار الحساب السابق والجديد</option>
+                    <option value="no">لا — إخفاء رصيد العميل من الإيصال</option>
+                </select>
+            </div>
+
+            <div class="compact-row">
+                <label>تذييل الفاتورة:</label>
+                <textarea id="invoice-footer-text" rows="2" placeholder="شكراً لتعاملكم معنا!"></textarea>
+            </div>
+
+            <div class="compact-btns">
+                <button type="button" class="btn-close-ai" onclick="window.SerajUI.closeModal('printerSettingsModal')">إلغاء</button>
+                <button type="button" class="btn-save-ai" onclick="savePrinterSettings()">✔ حفظ الإعدادات</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. نافذة إدارة قاموس الصوت والوحدات (بديل voice_settings.html المحذوف) -->
+    <div id="voiceDictModal" class="modal-overlay" onclick="window.SerajUI.closeModal('voiceDictModal')">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3>🎙️ قاموس الصوت والوحدات</h3></div>
+
+            <div style="font-size: 14px; font-weight: bold; color: var(--neon-border); margin-bottom: 6px;">1. وحدات القياس المحمية (لا تُسحب ككمية مثل 9 وات):</div>
+            <div id="voiceUnitsList" class="voice-chip-list"></div>
+            <div class="compact-row">
+                <input type="text" id="newVoiceUnitInput" placeholder="أضف وحدة جديدة (مثال: بوصة)">
+                <button type="button" class="btn-save-ai" style="flex: 0 0 auto; padding: 10px 14px;" onclick="addVoiceUnit()">+ إضافة</button>
+            </div>
+            <button type="button" class="details-toggle-btn" style="margin-bottom: 12px;" onclick="runAutoLearnUnits()">🧠 تعلم الوحدات تلقائياً من المخزن</button>
+
+            <div style="font-size: 14px; font-weight: bold; color: var(--neon-border); margin-bottom: 6px;">2. قاموس تصحيح النطق والمرادفات:</div>
+            <div id="voiceDictList" class="dict-rows-box"></div>
+            <div class="compact-row" style="gap: 6px;">
+                <input type="text" id="dictFromInput" placeholder="النطق (مثال: سبوت)">
+                <input type="text" id="dictToInput" placeholder="البديل (مثال: اسبوت)">
+                <button type="button" class="btn-save-ai" style="flex: 0 0 auto; padding: 10px 12px;" onclick="addVoiceDictEntry()">+</button>
+            </div>
+
+            <div class="compact-btns">
+                <button type="button" class="btn-close-ai" onclick="window.SerajUI.closeModal('voiceDictModal')">إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. نافذة إعدادات النسخ اليومي التلقائي عبر Google Apps Script -->
+    <div id="appsScriptModal" class="modal-overlay" onclick="window.SerajUI.closeModal('appsScriptModal')">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3>📧 النسخ التلقائي اليومي (GAS)</h3></div>
+            <p style="font-size: 13px; color: var(--text-muted); text-align: center; margin-top: -6px;">يرسل نسخة احتياطية وتقرير يومي مشفر بتوقيع سري (secretToken) لإيميلك الثابت تلقائياً.</p>
+            <div class="compact-row">
+                <label>التفعيل:</label>
+                <select id="gasEnabledSelect">
+                    <option value="false">متوقف</option>
+                    <option value="true">مفعّل يومياً</option>
+                </select>
+            </div>
+            <div class="compact-row"><label>رابط GAS:</label><input type="text" id="gasUrlInput" placeholder="https://script.google.com/macros/s/..." dir="ltr"></div>
+            <div class="compact-row"><label>الرمز السري:</label><input type="password" id="gasTokenInput" placeholder="secretToken" dir="ltr"></div>
+            <div class="compact-row"><label>الإيميل الثابت:</label><input type="email" id="gasEmailInput" placeholder="owner@example.com" dir="ltr"></div>
+            <div class="compact-btns">
+                <button type="button" class="btn-close-ai" onclick="window.SerajUI.closeModal('appsScriptModal')">إغلاق</button>
+                <button type="button" class="btn-save-ai" onclick="window.Utils.preventDoubleClick(this, saveAppsScriptSettings)">💾 حفظ</button>
+            </div>
+            <button type="button" class="details-toggle-btn" style="margin-top: 10px; margin-bottom: 0;" onclick="window.Utils.preventDoubleClick(this, testAppsScriptBackup)">🚀 اختبار إرسال نسخة الآن</button>
+        </div>
+    </div>
+
+    <!-- 5. شاشة تسجيل الدخول وتفعيل الباقات (Multi-Tenant SaaS + Offline Single) -->
+    <div id="seraj-login-screen" class="modal-overlay" style="z-index: 999999; background-color: var(--bg-dark-solid);">
+        <div class="compact-modal" style="max-width: 430px;" onclick="event.stopPropagation()">
+            <div style="text-align: center; margin-bottom: 12px;">
+                <div style="font-size: 44px; margin-bottom: 4px;">🛡️</div>
+                <h2 id="loginBrandTitle" style="margin: 0; color: var(--text-main);">نظام الكاشير الذكي</h2>
+                <p style="color: var(--text-muted); font-size: 13px; margin: 6px 0 0;">اختر طريقة الدخول أو تفعيل باقتك</p>
+            </div>
+
+            <div class="login-tabs">
+                <button type="button" id="tabCloudLogin" class="login-tab-btn active" onclick="switchLoginTab('cloud')">☁️ باقة السحابة (Pro/VIP)</button>
+                <button type="button" id="tabOfflineLogin" class="login-tab-btn" onclick="switchLoginTab('offline')">🔒 باقة أوفلاين (جهاز واحد)</button>
+            </div>
+
+            <!-- نموذج دخول السحابة عبر Firebase Authentication -->
+            <div id="cloudLoginForm">
+                <div class="compact-row"><label>البريد:</label><input type="email" id="cloud-email-input" placeholder="owner@store.com" dir="ltr" autocomplete="username"></div>
+                <div class="compact-row"><label>كلمة المرور:</label><input type="password" id="cloud-pass-input" placeholder="••••••••" dir="ltr" autocomplete="current-password"></div>
+                <button type="button" id="btnCloudLoginSubmit" class="btn-save-ai" style="width: 100%; margin-top: 8px;" onclick="window.Utils.preventDoubleClick(this, loginCloudAccount)">تسجيل الدخول السحابي 🚀</button>
+            </div>
+
+            <!-- نموذج تفعيل باقة جهاز واحد أوفلاين (تفعيل لمرة واحدة 3 ثوانٍ ثم 0 استهلاك سحابة) -->
+            <div id="offlineLoginForm" style="display: none;">
+                <p style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 0;">يتصل بالإنترنت لمرة واحدة فقط (3 ثوانٍ) لربط جهازك وقفل كود التفعيل، ثم يعمل أوفلاين بالكامل دون أي استهلاك سحابي.</p>
+                <div class="compact-row"><label>كود المحل:</label><input type="text" id="offline-store-id" placeholder="مثال: SHOP_101" dir="ltr"></div>
+                <div class="compact-row"><label>كود التفعيل:</label><input type="text" id="offline-code-input" placeholder="أدخل كود التفعيل" dir="ltr"></div>
+                <button type="button" id="btnOfflineActivate" class="btn-save-ai" style="width: 100%; margin-top: 8px;" onclick="window.Utils.preventDoubleClick(this, activateOfflineSingle)">🔓 تفعيل الباقة الأوفلاين</button>
+            </div>
+
+            <p id="login-error" class="val-red" style="display: none; text-align: center; margin-top: 12px; font-size: 14px;"></p>
+        </div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="print_manager.js"></script>
+    <script src="ai_brain.js" defer></script>
+
+    <script>
+        const safeHTML = (val) => window.Utils.sanitizeHTML(val);
+
+        function closeSidebar() {
+            const sidebar = document.getElementById('main-sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            if (sidebar) sidebar.classList.remove('open');
+            if (overlay) overlay.style.display = 'none';
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('main-sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            if (!sidebar || !overlay) return;
+            if (sidebar.classList.contains('open')) {
+                closeSidebar();
+            } else {
+                sidebar.classList.add('open');
+                overlay.style.display = 'block';
+            }
+        }
+
+        function updateHomeBrandingAndSessionUI() {
+            const settings = DB.getStoreSettings();
+            const sess = window.SerajAuth.getSession();
+            const shopTitle = settings.shopName || window.APP_BRAND_CONFIG.appName;
+
+            document.title = `${shopTitle} - الواجهة الرئيسية`;
+            const brandEl = document.getElementById('mainBrandTitle');
+            if (brandEl) brandEl.textContent = shopTitle;
+
+            const loginBrand = document.getElementById('loginBrandTitle');
+            if (loginBrand) loginBrand.textContent = window.APP_BRAND_CONFIG.appName;
+
+            const bShop = document.getElementById('badge-shop-name');
+            if (bShop) bShop.textContent = shopTitle;
+
+            const bRole = document.getElementById('badge-role-device');
+            if (bRole) {
+                const roleLabel = sess.role === 'owner' ? 'المالك (صلاحية كاملة)' : 'كاشير';
+                bRole.textContent = `${roleLabel} — ${sess.deviceName || 'جهاز 1'}`;
+            }
+
+            const bPlan = document.getElementById('badge-plan-name');
+            if (bPlan) {
+                const planMap = {
+                    offline_single: 'أوفلاين دائم (جهاز واحد)',
+                    pro: 'سحابية Pro',
+                    vip: 'سحابية VIP'
+                };
+                bPlan.textContent = planMap[sess.plan] || sess.plan;
+            }
+
+            // إخفاء الأزرار السحابية في باقة الأوفلاين الدائمة
+            const isOfflinePlan = window.SerajAuth.isOfflineSinglePlan();
+            document.querySelectorAll('.cloud-only-btn').forEach(el => {
+                el.style.display = isOfflinePlan ? 'none' : '';
+            });
+
+            // إظهار زر الدعم الفني فقط إذا تم ضبط رقم دعم في APP_BRAND_CONFIG
+            const supportBtn = document.getElementById('btn-support-wa');
+            const supportNum = (window.APP_BRAND_CONFIG.supportWhatsApp || window.APP_BRAND_CONFIG.supportPhone || '').trim();
+            if (supportBtn) {
+                supportBtn.style.display = supportNum ? 'flex' : 'none';
+            }
+
+            window.SerajAuth.applyRoleGuards();
+        }
+
+        function openSupportWhatsApp() {
+            closeSidebar();
+            const num = String(window.APP_BRAND_CONFIG.supportWhatsApp || window.APP_BRAND_CONFIG.supportPhone || '').replace(/[^\d]/g, '');
+            if (!num) return;
+            window.open(`https://wa.me/${num}`, '_blank', 'noopener');
+        }
+
+        // =========================================================================
+        // إعدادات المتجر والذكاء
+        // =========================================================================
+        function openStoreSettingsModal() {
+            closeSidebar();
+            const settings = DB.getStoreSettings();
+            document.getElementById('set-store-name').value = settings.shopName || '';
+            document.getElementById('set-store-phone').value = settings.shopPhone || '';
+            document.getElementById('set-store-address').value = settings.shopAddress || '';
+            document.getElementById('set-device-name').value = localStorage.getItem('seraj_device_name') || '';
+            document.getElementById('settings_gemini_link').value = localStorage.getItem('seraj_gemini_link') || '';
+            document.getElementById('set-ai-key').value = localStorage.getItem('seraj_ai_key') || '';
+            window.SerajUI.openModal('storeSettingsModal');
+        }
+
+        function saveStoreSettingsModal() {
+            const shopName = document.getElementById('set-store-name').value.trim();
+            const shopPhone = document.getElementById('set-store-phone').value.trim();
+            const shopAddress = document.getElementById('set-store-address').value.trim();
+            const devName = document.getElementById('set-device-name').value.trim();
+            const geminiLink = document.getElementById('settings_gemini_link').value.trim();
+            const aiKey = document.getElementById('set-ai-key').value.trim();
+
+            DB.saveStoreSettings({
+                shopName: shopName || window.APP_BRAND_CONFIG.appName,
+                shopPhone: shopPhone,
+                shopAddress: shopAddress
+            });
+            if (devName) localStorage.setItem('seraj_device_name', devName);
+            localStorage.setItem('seraj_gemini_link', geminiLink);
+            localStorage.setItem('seraj_ai_key', aiKey);
+
+            document.getElementById('main-menu-btn')?.classList.remove('needs-setup');
+            window.SerajUI.closeModal('storeSettingsModal');
+            updateHomeBrandingAndSessionUI();
+            SerajAlert('✅ تم حفظ إعدادات المتجر بنجاح!', 'success');
+        }
+
+        // =========================================================================
+        // إعدادات الطابعة والفواتير (تشمل الهاتف + إظهار الرصيد)
+        // =========================================================================
+        function openPrinterSettingsModal() {
+            closeSidebar();
+            const settings = DB.getStoreSettings();
+            document.getElementById('printModeSelect').value = localStorage.getItem('seraj_auto_print_setting') || 'ask';
+            document.getElementById('printer-type').value = localStorage.getItem('seraj_printer_type') || 'usb';
+            document.getElementById('printerStoreName').value = settings.shopName || '';
+            document.getElementById('printerStorePhone').value = settings.shopPhone || '';
+            document.getElementById('printerStoreAddress').value = settings.shopAddress || '';
+            document.getElementById('printerShowBalance').value = settings.printBalance || 'yes';
+            document.getElementById('invoice-footer-text').value = settings.footerNote || '';
+            window.SerajUI.openModal('printerSettingsModal');
+        }
+
+        function savePrinterSettings() {
+            const mode = document.getElementById('printModeSelect').value;
+            const type = document.getElementById('printer-type').value;
+            const shopName = document.getElementById('printerStoreName').value.trim();
+            const shopPhone = document.getElementById('printerStorePhone').value.trim();
+            const shopAddress = document.getElementById('printerStoreAddress').value.trim();
+            const printBalance = document.getElementById('printerShowBalance').value;
+            const footerNote = document.getElementById('invoice-footer-text').value.trim();
+
+            localStorage.setItem('seraj_auto_print_setting', mode);
+            localStorage.setItem('seraj_printer_type', type);
+            DB.saveStoreSettings({
+                shopName: shopName || window.APP_BRAND_CONFIG.appName,
+                shopPhone: shopPhone,
+                shopAddress: shopAddress,
+                printBalance: printBalance,
+                footerNote: footerNote
+            });
+
+            window.SerajUI.closeModal('printerSettingsModal');
+            updateHomeBrandingAndSessionUI();
+            SerajAlert('✅ تم حفظ إعدادات الطابعة والفواتير بنجاح!', 'success');
+        }
+
+        // =========================================================================
+        // نافذة إدارة قاموس الصوت والوحدات (بديل voice_settings.html المحذوف)
+        // =========================================================================
+        function openVoiceDictModal() {
+            closeSidebar();
+            renderVoiceDictUI();
+            window.SerajUI.openModal('voiceDictModal');
+        }
+
+        function renderVoiceDictUI() {
+            const units = DB.getVoiceUnits() || [];
+            const dict = DB.getVoiceDictionary() || {};
+
+            const unitsEl = document.getElementById('voiceUnitsList');
+            unitsEl.innerHTML = units.length > 0
+                ? units.map(u => `<span class="voice-chip">${safeHTML(u)}<button type="button" data-del-unit="${safeHTML(u)}" title="حذف">×</button></span>`).join('')
+                : `<span class="text-muted" style="font-size:13px;">لا توجد وحدات محفوظة</span>`;
+
+            unitsEl.querySelectorAll('button[data-del-unit]').forEach(btn => {
+                btn.onclick = () => {
+                    const target = btn.getAttribute('data-del-unit');
+                    const next = DB.getVoiceUnits().filter(x => x !== target);
+                    DB.saveVoiceUnits(next);
+                    renderVoiceDictUI();
+                };
+            });
+
+            const entries = Object.entries(dict);
+            const dictEl = document.getElementById('voiceDictList');
+            dictEl.innerHTML = entries.length > 0
+                ? entries.map(([k, v]) => `
+                    <div class="dict-row-item">
+                        <span>${safeHTML(k)} ⬅ <strong class="val-green">${safeHTML(v)}</strong></span>
+                        <button type="button" data-del-dict="${safeHTML(k)}" style="background:transparent; border:none; color:var(--accent-red); font-weight:bold; cursor:pointer; flex:none; padding:2px 8px;">🗑️</button>
+                    </div>
+                `).join('')
+                : `<div style="padding:10px; text-align:center; color:var(--text-muted); font-size:13px;">القاموس فارغ</div>`;
+
+            dictEl.querySelectorAll('button[data-del-dict]').forEach(btn => {
+                btn.onclick = () => {
+                    const key = btn.getAttribute('data-del-dict');
+                    const nextDict = { ...DB.getVoiceDictionary() };
+                    delete nextDict[key];
+                    DB.saveVoiceDictionary(nextDict);
+                    renderVoiceDictUI();
+                };
+            });
+        }
+
+        function addVoiceUnit() {
+            const inp = document.getElementById('newVoiceUnitInput');
+            const val = (inp?.value || '').trim();
+            if (!val) return;
+            const list = DB.getVoiceUnits();
+            if (!list.includes(val)) {
+                list.push(val);
+                DB.saveVoiceUnits(list);
+            }
+            inp.value = '';
+            renderVoiceDictUI();
+        }
+
+        function addVoiceDictEntry() {
+            const fromInp = document.getElementById('dictFromInput');
+            const toInp = document.getElementById('dictToInput');
+            const k = (fromInp?.value || '').trim();
+            const v = (toInp?.value || '').trim();
+            if (!k || !v) return SerajAlert('أدخل الكلمة المنطوقة والبديل الصحيح.', 'error');
+            const dict = { ...DB.getVoiceDictionary() };
+            dict[k] = v;
+            DB.saveVoiceDictionary(dict);
+            fromInp.value = '';
+            toInp.value = '';
+            renderVoiceDictUI();
+        }
+
+        function runAutoLearnUnits() {
+            const res = DB.autoLearnFromInventory();
+            renderVoiceDictUI();
+            SerajAlert(`✅ تم الفحص التلقائي! أُضيفت (${res.newlyLearned}) وحدة جديدة (الإجمالي: ${res.totalUnits}).`, 'success');
+        }
+
+        // =========================================================================
+        // النسخ الاحتياطي والاستعادة بـ Allowlist صارمة (Data.json + Images.json) و GAS
+        // =========================================================================
+        async function handleBackupData() {
+            closeSidebar();
+            const ok = await DB.exportOfflineDataJSON(true);
+            if (ok) {
+                SerajAlert('✅ تم تجهيز ومشاركة نسخة البيانات Data.json بنجاح!', 'success');
+            }
+        }
+
+        async function handleBackupImages() {
+            closeSidebar();
+            const ok = await DB.exportImagesBackupJSON(true);
+            if (ok) {
+                SerajAlert('✅ تم تجهيز نسخة الصور المستقلة Images.json بنجاح!', 'success');
+            }
+        }
+
+        function triggerRestoreInput() {
+            closeSidebar();
+            const inp = document.getElementById('restore-file-input');
+            if (inp) {
+                inp.value = '';
+                inp.click();
+            }
+        }
+
+        function handleRestoreFile(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    await DB.restoreData(e.target.result, false);
+                } finally {
+                    event.target.value = '';
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function openAppsScriptModal() {
+            closeSidebar();
+            const cfg = DB.getAppsScriptConfig();
+            document.getElementById('gasEnabledSelect').value = cfg.enabled ? 'true' : 'false';
+            document.getElementById('gasUrlInput').value = cfg.url || '';
+            document.getElementById('gasTokenInput').value = cfg.secretToken || '';
+            document.getElementById('gasEmailInput').value = cfg.email || '';
+            window.SerajUI.openModal('appsScriptModal');
+        }
+
+        function saveAppsScriptSettings() {
+            DB.saveAppsScriptConfig({
+                enabled: document.getElementById('gasEnabledSelect').value === 'true',
+                url: document.getElementById('gasUrlInput').value.trim(),
+                secretToken: document.getElementById('gasTokenInput').value.trim(),
+                email: document.getElementById('gasEmailInput').value.trim()
+            });
+            window.SerajUI.closeModal('appsScriptModal');
+            SerajAlert('✅ تم حفظ إعدادات النسخ التلقائي اليومي.', 'success');
+        }
+
+        async function testAppsScriptBackup() {
+            saveAppsScriptSettings();
+            const todayStr = window.Utils.getLocalDateString();
+            const res = await DB.sendToAppsScript({
+                action: 'daily_backup_and_report',
+                date: todayStr,
+                summary: DB.getFinancialSummary(todayStr, todayStr),
+                backupData: DB.backupData()
+            });
+            if (res && res.ok) {
+                SerajAlert('✅ تم إرسال النسخة والتقرير بنجاح والتحقق من استجابة السيرفر!', 'success');
+            } else {
+                SerajAlert(`❌ تعذر الإرسال (${res ? res.reason : 'خطأ غير معروف'}). تأكد من الرابط و secretToken.`, 'error');
+            }
+        }
+
+        // =========================================================================
+        // المزامنة السحابية والأرشفة وتسجيل الدخول وتفعيل الأوفلاين
+        // =========================================================================
+        async function handleManualCloudSync() {
+            closeSidebar();
+            const ok = await DB.syncNow();
+            if (ok) SerajAlert('✅ اكتملت المزامنة السحابية بنجاح!', 'success');
+        }
+
+        function handlePullFromCloud() {
+            closeSidebar();
+            DB.syncFromCloud();
+        }
+
+        function triggerSystemArchive() {
+            closeSidebar();
+            DB.archiveSmartData();
+        }
+
+        async function handleSignOut() {
+            closeSidebar();
+            const ok = await SerajConfirm('هل تريد تسجيل الخروج من هذا المحل؟');
+            if (ok) {
+                await window.SerajAuth.signOut();
+            }
+        }
+
+        function switchLoginTab(tab) {
+            const isCloud = (tab === 'cloud');
+            document.getElementById('tabCloudLogin').classList.toggle('active', isCloud);
+            document.getElementById('tabOfflineLogin').classList.toggle('active', !isCloud);
+            document.getElementById('cloudLoginForm').style.display = isCloud ? 'block' : 'none';
+            document.getElementById('offlineLoginForm').style.display = isCloud ? 'none' : 'block';
+            const err = document.getElementById('login-error');
+            if (err) err.style.display = 'none';
+        }
+
+        function showLoginError(msg) {
+            const err = document.getElementById('login-error');
+            if (err) {
+                err.textContent = msg;
+                err.style.display = 'block';
+            }
+        }
+
+        async function loginCloudAccount() {
+            const email = (document.getElementById('cloud-email-input')?.value || '').trim();
+            const pass = (document.getElementById('cloud-pass-input')?.value || '').trim();
+
+            if (!email || !pass) return showLoginError('يرجى إدخال البريد الإلكتروني وكلمة المرور.');
+            if (!navigator.onLine) return showLoginError('⚠️ يجب الاتصال بالإنترنت لتسجيل الدخول لأول مرة.');
+
+            showLoginError('⏳ جاري التحقق من الحساب وصلاحيات المحل...');
+
+            try {
+                const { claims } = await window.SerajAuth.signInWithEmail(email, pass);
+                const storeId = (claims && claims.storeId) ? String(claims.storeId).trim() : '';
+                if (!storeId) {
+                    await window.SerajAuth.signOut();
+                    return showLoginError('❌ هذا الحساب غير مربوط بمحل مفعل (storeId مفقود).');
+                }
+                document.getElementById('seraj-login-screen').style.display = 'none';
+                window.location.reload();
+            } catch (err) {
+                console.error('Cloud Auth Error:', err);
+                showLoginError('❌ بيانات الدخول غير صحيحة أو تعذر الاتصال بالسيرفر.');
+            }
+        }
+
+        async function activateOfflineSingle() {
+            const storeId = (document.getElementById('offline-store-id')?.value || '').trim();
+            const code = (document.getElementById('offline-code-input')?.value || '').trim();
+            if (!storeId || !code) return showLoginError('يرجى إدخال كود المحل وكود التفعيل.');
+
+            showLoginError('⏳ جاري ربط الجهاز وقفل كود التفعيل...');
+            try {
+                await window.SerajAuth.activateOfflineSingleLicense(storeId, code);
+                document.getElementById('seraj-login-screen').style.display = 'none';
+                window.location.reload();
+            } catch (err) {
+                showLoginError('❌ ' + (err.message || 'تعذر تفعيل الباقة الأوفلاين.'));
+            }
+        }
+
+        // =========================================================================
+        // بوابة التشغيل بعد اكتمال SerajMegaDB.ready ومستمع seraj:cloudReady
+        // =========================================================================
+        async function initHomePage() {
+            await window.SerajMegaDB.ready;
+            DB.applySavedTheme();
+            updateHomeBrandingAndSessionUI();
+
+            const sess = window.SerajAuth.getSession();
+            if (!sess.storeId) {
+                document.getElementById('seraj-login-screen').style.display = 'flex';
+                return;
+            }
+
+            if (sess.plan === 'offline_single' && !window.SerajAuth.verifyOfflineCertificate()) {
+                SerajAlert('⚠️ شهادة تفعيل الأوفلاين غير صالحة لهذا الجهاز، يرجى إعادة التفعيل.', 'error');
+                document.getElementById('seraj-login-screen').style.display = 'flex';
+                switchLoginTab('offline');
+                return;
+            }
+
+            if (!localStorage.getItem('seraj_store_name')) {
+                document.getElementById('main-menu-btn')?.classList.add('needs-setup');
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initHomePage();
+        });
+
+        window.addEventListener('seraj:cloudReady', () => {
+            updateHomeBrandingAndSessionUI();
+        });
+
+        window.addEventListener('seraj:updated', (e) => {
+            const col = e && e.detail ? e.detail.collection : null;
+            if (!col || col === 'store_settings' || col === 'voice_config') {
+                updateHomeBrandingAndSessionUI();
+            }
+        });
+
+        window.addEventListener('popstate', () => {
+            if (window.SerajUI._modalStack.length === 0) {
+                closeSidebar();
+            }
+        });
+    </script>
+</body>
+</html>

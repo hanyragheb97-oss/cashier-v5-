@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تقرير أرباح مجمل</title>
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b0d1e">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="stylesheet" href="style.css">
+
+    <!-- المكتبات المحلية للعمل أوفلاين 100% -->
+    <script src="./libs/xlsx.full.min.js" defer></script>
+    <script src="./libs/html2pdf.bundle.min.js" defer></script>
+
+    <style>
+        .report-main-wrap {
+            max-width: 640px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 16px 14px 95px;
+            box-sizing: border-box;
+        }
+
+        .profit-summary-card {
+            background-color: var(--card-bg-alt);
+            border: 2px solid var(--neon-border);
+            border-radius: 16px;
+            padding: 16px 18px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 0 15px var(--neon-glow);
+        }
+
+        .profit-summary-card.final-net-card {
+            border-color: var(--accent-green);
+            box-shadow: 0 0 20px var(--btn-save-glow);
+            margin-top: 18px;
+        }
+
+        .profit-summary-card.final-net-card.negative {
+            border-color: var(--accent-red);
+            box-shadow: 0 0 20px var(--btn-cancel-glow);
+        }
+
+        .summary-card-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--text-main);
+            text-align: right;
+            line-height: 1.4;
+        }
+
+        .summary-card-sub {
+            display: block;
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: normal;
+            margin-top: 2px;
+        }
+
+        .summary-val-box {
+            padding: 8px 14px;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: bold;
+            min-width: 132px;
+            text-align: center;
+            direction: ltr;
+            background-color: var(--bg-dark-solid);
+            border: 2px solid var(--neon-border);
+            color: var(--text-main);
+            flex-shrink: 0;
+        }
+
+        .summary-val-box.box-sales {
+            border-color: var(--color-customer);
+            color: var(--color-customer);
+        }
+
+        .summary-val-box.box-cost {
+            border-color: var(--accent-red);
+            color: var(--accent-red);
+        }
+
+        .summary-val-box.box-discount {
+            border-color: var(--accent-yellow);
+            color: var(--accent-yellow);
+        }
+
+        .summary-val-box.box-profit {
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+
+        .archived-note-banner {
+            display: none;
+            text-align: center;
+            font-size: 13px;
+            font-weight: bold;
+            color: var(--accent-yellow);
+            background-color: var(--card-bg-alt);
+            border: 1.5px dashed var(--neon-border);
+            border-radius: 12px;
+            padding: 10px 12px;
+            margin-bottom: 12px;
+        }
+    </style>
+</head>
+<body class="page-records" onclick="closeAllMenus()">
+
+    <div class="header header-records">
+        <span>تقرير أرباح مجمل</span>
+    </div>
+
+    <div class="report-main-wrap" id="pdf-wrapper">
+        <div id="archivedNoteBanner" class="archived-note-banner">
+            📦 يشمل هذا الملخص صافي الفواتير الطياري المرحلة للأرشيف السحابي.
+        </div>
+
+        <div class="profit-summary-card">
+            <div class="summary-card-title">
+                صافي المبيعات
+                <span class="summary-card-sub">بعد المرتجعات والخصومات (<span id="salesCountBadge">0</span> فاتورة)</span>
+            </div>
+            <div class="summary-val-box box-sales"><span id="totalSalesVal">0.00</span> ج</div>
+        </div>
+
+        <div class="profit-summary-card">
+            <div class="summary-card-title">
+                إجمالي التكلفة (FIFO)
+                <span class="summary-card-sub">تكلفة البضاعة المباعة الفعلية</span>
+            </div>
+            <div class="summary-val-box box-cost"><span id="totalCostVal">0.00</span> ج</div>
+        </div>
+
+        <div class="profit-summary-card">
+            <div class="summary-card-title">
+                مجمل الربح
+                <span class="summary-card-sub">صافي المبيعات − التكلفة</span>
+            </div>
+            <div class="summary-val-box box-profit" id="grossProfitBox"><span id="grossProfitVal">0.00</span> ج</div>
+        </div>
+
+        <div class="profit-summary-card">
+            <div class="summary-card-title">
+                إجمالي المصروفات النثرية
+                <span class="summary-card-sub">المصروفات المسجلة بالخزينة خلال الفترة</span>
+            </div>
+            <div class="summary-val-box box-cost"><span id="totalExpensesVal">0.00</span> ج</div>
+        </div>
+
+        <div class="profit-summary-card">
+            <div class="summary-card-title">
+                إجمالي الخصومات الممنوحة
+                <span class="summary-card-sub">للمراجعة (مخصومة بالفعل من صافي المبيعات)</span>
+            </div>
+            <div class="summary-val-box box-discount"><span id="totalDiscountVal">0.00</span> ج</div>
+        </div>
+
+        <div class="profit-summary-card final-net-card" id="finalNetCard">
+            <div class="summary-card-title">
+                <span class="val-green" id="netProfitTitle">صافي الربح النهائي</span>
+                <span class="summary-card-sub">هامش الربح الصافي: <strong id="profitMarginBadge" dir="ltr">0.00%</strong></span>
+            </div>
+            <div class="summary-val-box box-profit" id="netProfitBox"><span id="netProfitVal">0.00</span> ج</div>
+        </div>
+    </div>
+
+    <!-- الشريط السفلي الموحد -->
+    <div class="unified-bottom-bar" onclick="event.stopPropagation()">
+        <button type="button" class="header-back-btn" onclick="goBackSmart()">
+            <span class="arrow">⬅</span>
+            <span class="text">BACK</span>
+        </button>
+
+        <div class="bottom-capsules">
+            <div class="capsule" onclick="toggleDurationMenu(event)">
+                📅 <span id="currentDurationLabelOutside">آخر 7 أيام</span>
+                <div class="dropdown-menu" id="durationDropdownOutside">
+                    <div class="dropdown-menu-item" onclick="filterByDate('اليوم', 'today')">اليوم</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('أمس', 'yesterday')">أمس</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('آخر 7 أيام', '7days')">آخر 7 أيام</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('هذا الشهر', 'this_month')">هذا الشهر</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('آخر 30 يوم', '30days')">آخر 30 يوم</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('الشهر الماضي', 'last_month')">الشهر الماضي</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('مدى العمل (الكل)', 'all_time')">مدى العمل (الكل)</div>
+                    <div class="dropdown-menu-item" onclick="openCustomDateModal()">📅 تاريخ مخصص...</div>
+                </div>
+            </div>
+
+            <div class="capsule print-btn" onclick="togglePrintOptions(event)">
+                🖨️ خيارات
+                <div class="dropdown-menu" id="floatingPrintMenu">
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('thermal')">🧾 طباعة حرارية (80mm)</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('a4')">🖨️ طباعة ورقة (A4)</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('pdf_export')">📄 مشاركة / تصدير PDF</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('excel_export')">📊 تصدير Excel</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة التاريخ المخصص -->
+    <div class="modal-overlay" id="customDateModal" onclick="window.SerajUI.closeModal('customDateModal')">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3>تحديد تاريخ مخصص</h3></div>
+            <div class="compact-row"><label>من تاريخ:</label><input type="date" id="dateFrom"></div>
+            <div class="compact-row"><label>إلى تاريخ:</label><input type="date" id="dateTo"></div>
+            <div class="compact-btns">
+                <button type="button" class="btn-close-ai" onclick="window.SerajUI.closeModal('customDateModal')">إلغاء</button>
+                <button type="button" class="btn-save-ai" onclick="applyCustomDate()">تطبيق البحث</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="print_manager.js"></script>
+
+    <script>
+        let currentDateFilter = '7days';
+        let currentDurationLabel = 'آخر 7 أيام';
+        let customDateFrom = null;
+        let customDateTo = null;
+        let lastSummary = null;
+
+        const safeHTML = (v) => window.Utils.sanitizeHTML(v);
+        const round2 = (v) => window.Utils.round2(v);
+
+        function updatePageBranding() {
+            const brand = window.PrintManager ? window.PrintManager.getShopBranding() : { shopName: window.APP_BRAND_CONFIG.appName };
+            document.title = `تقرير أرباح مجمل - ${brand.shopName}`;
+        }
+
+        function closeAllMenus() {
+            ['durationDropdownOutside', 'floatingPrintMenu'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
+        }
+
+        function toggleDurationMenu(e) {
+            if (e) e.stopPropagation();
+            const m = document.getElementById('durationDropdownOutside');
+            const isVisible = m && m.style.display === 'block';
+            closeAllMenus();
+            if (m && !isVisible) m.style.display = 'block';
+        }
+
+        function togglePrintOptions(e) {
+            if (e) e.stopPropagation();
+            const m = document.getElementById('floatingPrintMenu');
+            const isVisible = m && m.style.display === 'block';
+            closeAllMenus();
+            if (m && !isVisible) m.style.display = 'block';
+        }
+
+        function goBackSmart() {
+            window.location.href = 'smart_accountant.html';
+        }
+
+        function resolveDateRange() {
+            if (currentDateFilter === 'all_time') {
+                return { start: null, end: null };
+            }
+            const now = new Date();
+            const todayIso = window.Utils.getLocalDateString(now);
+
+            if (currentDateFilter === 'today') {
+                return { start: todayIso, end: todayIso };
+            }
+            if (currentDateFilter === 'yesterday') {
+                const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+                const yIso = window.Utils.getLocalDateString(y);
+                return { start: yIso, end: yIso };
+            }
+            if (currentDateFilter === '7days') {
+                const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+                return { start: window.Utils.getLocalDateString(d), end: todayIso };
+            }
+            if (currentDateFilter === '30days') {
+                const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+                return { start: window.Utils.getLocalDateString(d), end: todayIso };
+            }
+            if (currentDateFilter === 'this_month') {
+                const firstM = window.Utils.getLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
+                return { start: firstM, end: todayIso };
+            }
+            if (currentDateFilter === 'last_month') {
+                const lm = window.Utils.getLastMonthRange(now);
+                return { start: lm.start, end: lm.end };
+            }
+            if (currentDateFilter === 'custom' && customDateFrom && customDateTo) {
+                return { start: customDateFrom, end: customDateTo };
+            }
+            return { start: null, end: null };
+        }
+
+        function filterByDate(label, val) {
+            currentDateFilter = val;
+            currentDurationLabel = label;
+            const outLbl = document.getElementById('currentDurationLabelOutside');
+            if (outLbl) outLbl.textContent = label;
+            closeAllMenus();
+            calculateSummary();
+        }
+
+        function openCustomDateModal() {
+            closeAllMenus();
+            window.SerajUI.openModal('customDateModal');
+        }
+
+        function applyCustomDate() {
+            const f = document.getElementById('dateFrom').value;
+            const t = document.getElementById('dateTo').value;
+            if (!f || !t) return SerajAlert('يرجى تحديد تاريخ البداية والنهاية.', 'error');
+            currentDateFilter = 'custom';
+            customDateFrom = f;
+            customDateTo = t;
+            currentDurationLabel = `${f} إلى ${t}`;
+            document.getElementById('currentDurationLabelOutside').textContent = 'تاريخ مخصص';
+            window.SerajUI.closeModal('customDateModal');
+            calculateSummary();
+        }
+
+        // الحساب الموحد عبر DB.getFinancialSummary(startIso, endIso)
+        function calculateSummary() {
+            const { start, end } = resolveDateRange();
+            const summary = DB.getFinancialSummary(start, end);
+            lastSummary = summary;
+
+            const netSales = round2(summary.netSales);
+            const netCOGS = round2(summary.netCOGS);
+            const grossProfit = round2(summary.grossProfit);
+            const totalExpenses = round2(summary.totalExpenses);
+            const salesDiscounts = round2(summary.salesDiscounts);
+            const netProfit = round2(summary.netProfit);
+            const marginPct = round2(summary.profitMarginPct);
+
+            document.getElementById('salesCountBadge').textContent = String(summary.salesCount || 0);
+            document.getElementById('totalSalesVal').textContent = netSales.toFixed(2);
+            document.getElementById('totalCostVal').textContent = netCOGS.toFixed(2);
+            document.getElementById('grossProfitVal').textContent = grossProfit.toFixed(2);
+            document.getElementById('totalExpensesVal').textContent = totalExpenses.toFixed(2);
+            document.getElementById('totalDiscountVal').textContent = salesDiscounts.toFixed(2);
+            document.getElementById('netProfitVal').textContent = netProfit.toFixed(2);
+            document.getElementById('profitMarginBadge').textContent = `${marginPct.toFixed(2)}%`;
+
+            const archBanner = document.getElementById('archivedNoteBanner');
+            if (archBanner) archBanner.style.display = summary.archivedIncluded ? 'block' : 'none';
+
+            const grossBox = document.getElementById('grossProfitBox');
+            grossBox.className = `summary-val-box ${grossProfit < 0 ? 'box-cost' : 'box-profit'}`;
+
+            const netCard = document.getElementById('finalNetCard');
+            const netBox = document.getElementById('netProfitBox');
+            const netTitle = document.getElementById('netProfitTitle');
+            if (netProfit < 0) {
+                netCard.classList.add('negative');
+                netBox.className = 'summary-val-box box-cost';
+                netTitle.className = 'val-red';
+            } else {
+                netCard.classList.remove('negative');
+                netBox.className = 'summary-val-box box-profit';
+                netTitle.className = 'val-green';
+            }
+        }
+
+        // =========================================================================
+        // الطباعة (80mm / A4) و PDF (downloadRealPDF) و Excel
+        // =========================================================================
+        function _buildA4ReportHTML() {
+            const brand = window.PrintManager.getShopBranding();
+            const todayStr = window.Utils.getLocalDateString();
+            const s = lastSummary || DB.getFinancialSummary(null, null);
+
+            return `
+                <div dir="rtl" style="background:#fff; color:#000; padding:12px; font-family:Tahoma, Arial, sans-serif;">
+                    <div style="text-align:center; border-bottom:3px solid #000; padding-bottom:10px; margin-bottom:16px;">
+                        <h1 style="margin:0; font-size:24px;">${safeHTML(brand.shopName)} — تقرير أرباح مجمل</h1>
+                        ${brand.shopPhone ? `<div style="font-size:13px; margin-top:3px;">ت: ${safeHTML(brand.shopPhone)}</div>` : ''}
+                        <div style="font-size:14px; font-weight:bold; margin-top:4px;">الفترة: ${safeHTML(currentDurationLabel)} | التاريخ: ${safeHTML(todayStr)}</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="text-align:right; width:65%;">البند المحاسبي</th>
+                                <th style="width:35%;">القيمة (جنيه)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td style="text-align:right;">صافي المبيعات (بعد المرتجعات والخصومات)</td><td dir="ltr">${round2(s.netSales).toFixed(2)}</td></tr>
+                            <tr><td style="text-align:right;">إجمالي التكلفة الفعلية (FIFO)</td><td dir="ltr" class="val-red">${round2(s.netCOGS).toFixed(2)}</td></tr>
+                            <tr><td style="text-align:right;">مجمل الربح (قبل المصروفات)</td><td dir="ltr" class="${s.grossProfit >= 0 ? 'val-green' : 'val-red'}">${round2(s.grossProfit).toFixed(2)}</td></tr>
+                            <tr><td style="text-align:right;">إجمالي المصروفات النثرية</td><td dir="ltr" class="val-red">${round2(s.totalExpenses).toFixed(2)}</td></tr>
+                            <tr><td style="text-align:right;">إجمالي الخصومات الممنوحة (للمراجعة)</td><td dir="ltr">${round2(s.salesDiscounts).toFixed(2)}</td></tr>
+                            <tr style="background:#e2e8f0;">
+                                <td style="text-align:right; font-size:16px;">صافي الربح النهائي (هامش ${round2(s.profitMarginPct).toFixed(2)}%)</td>
+                                <td dir="ltr" class="${s.netProfit >= 0 ? 'val-green' : 'val-red'}" style="font-size:17px;">${round2(s.netProfit).toFixed(2)}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function printThermalReport() {
+            const brand = window.PrintManager.getShopBranding();
+            const s = lastSummary || DB.getFinancialSummary(null, null);
+            const row = (label, val, strong = false) => `
+                <div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:${strong ? '2px solid #000' : '1px dotted #333'}; font-weight:${strong ? 'bold' : 'normal'}; font-size:${strong ? '15px' : '13px'};">
+                    <span>${label}</span>
+                    <span dir="ltr">${round2(val).toFixed(2)} ج</span>
+                </div>
+            `;
+
+            const docHtml = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>تقرير أرباح مجمل</title><style>@page{size:80mm auto;margin:0;}body{margin:0;padding:4mm 2mm;width:74mm;box-sizing:border-box;font-family:Tahoma,Arial,sans-serif;font-size:13px;color:#000;background:#fff;}</style></head><body>
+                <div style="text-align:center; border-bottom:2px dashed #000; padding-bottom:6px; margin-bottom:8px;">
+                    <div style="font-size:18px; font-weight:bold;">${safeHTML(brand.shopName)}</div>
+                    <div style="font-weight:bold;">تقرير أرباح مجمل</div>
+                    <div style="font-size:11px;">${safeHTML(currentDurationLabel)} | ${safeHTML(window.Utils.getLocalDateString())}</div>
+                </div>
+                ${row('صافي المبيعات:', s.netSales)}
+                ${row('إجمالي التكلفة:', s.netCOGS)}
+                ${row('مجمل الربح:', s.grossProfit)}
+                ${row('المصروفات:', s.totalExpenses)}
+                ${row('الخصومات:', s.salesDiscounts)}
+                ${row('صافي الربح النهائي:', s.netProfit, true)}
+                <div style="text-align:center; margin-top:10px; font-size:12px;">${safeHTML(brand.footerNote)}</div>
+            </body></html>`;
+
+            window.PrintManager._printHtmlViaSafeIframe(docHtml);
+        }
+
+        function handlePrintAction(action) {
+            closeAllMenus();
+            const s = lastSummary || DB.getFinancialSummary(null, null);
+
+            if (action === 'thermal') {
+                printThermalReport();
+            } else if (action === 'a4') {
+                window.PrintManager.printA4HTML(_buildA4ReportHTML(), 'تقرير أرباح مجمل');
+            } else if (action === 'pdf_export') {
+                window.Utils.downloadRealPDF(_buildA4ReportHTML(), `Profit_Summary_${window.Utils.getLocalDateString()}.pdf`);
+            } else if (action === 'excel_export') {
+                const excelData = [
+                    ['البند', 'القيمة (جنيه)'],
+                    ['الفترة الزمنية', currentDurationLabel],
+                    ['صافي المبيعات (بعد المرتجعات والخصومات)', round2(s.netSales)],
+                    ['إجمالي التكلفة (FIFO)', round2(s.netCOGS)],
+                    ['مجمل الربح', round2(s.grossProfit)],
+                    ['إجمالي المصروفات النثرية', round2(s.totalExpenses)],
+                    ['إجمالي الخصومات الممنوحة', round2(s.salesDiscounts)],
+                    ['صافي الربح النهائي', round2(s.netProfit)],
+                    ['هامش الربح الصافي (%)', round2(s.profitMarginPct)]
+                ];
+                window.PrintManager.exportToExcel(excelData, `Profit_Summary_${window.Utils.getLocalDateString()}`);
+            }
+        }
+
+        async function initPage() {
+            await window.SerajMegaDB.ready;
+            DB.applySavedTheme();
+            if (!window.SerajAuth.applyRoleGuards()) return;
+            updatePageBranding();
+            calculateSummary();
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initPage();
+        });
+
+        window.addEventListener('seraj:updated', (e) => {
+            const col = e && e.detail ? e.detail.collection : null;
+            if (!col || ['all', 'sales_invoices', 'products', 'treasury_moves', 'store_settings'].includes(col)) {
+                updatePageBranding();
+                calculateSummary();
+            }
+        });
+
+        window.addEventListener('popstate', () => {
+            if (window.SerajUI._modalStack.length > 0) return;
+            goBackSmart();
+        });
+    </script>
+</body>
+</html>

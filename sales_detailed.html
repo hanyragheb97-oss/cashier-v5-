@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تقرير مبيعات مفصل</title>
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b0d1e">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="stylesheet" href="style.css">
+
+    <!-- المكتبات المحلية للعمل أوفلاين 100% -->
+    <script src="./libs/xlsx.full.min.js" defer></script>
+    <script src="./libs/html2pdf.bundle.min.js" defer></script>
+
+    <style>
+        .report-main-wrap {
+            max-width: 860px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 12px 12px 95px;
+            box-sizing: border-box;
+        }
+
+        .total-pill {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 13px;
+            margin-top: 5px;
+            border: 1.5px solid var(--accent-green);
+            color: var(--accent-green);
+            background-color: var(--surface-subtle);
+            direction: ltr;
+        }
+
+        .total-pill.return-pill {
+            border-color: var(--accent-red);
+            color: var(--accent-red);
+        }
+
+        .report-total-footer td {
+            background-color: var(--table-header-bg);
+            border-top: 2px solid var(--neon-border);
+            padding: 14px 10px;
+            line-height: 1.8;
+            font-size: 15px;
+        }
+    </style>
+</head>
+<body class="page-records" onclick="closeAllMenus()">
+
+    <div class="header header-records">
+        <span>تقرير مبيعات مفصل</span>
+    </div>
+
+    <div class="report-main-wrap">
+        <div class="search-container">
+            <input type="text" id="searchInput" class="search-input seraj-search-input" placeholder="ابحث باسم المنتج أو العميل أو رقم الفاتورة..." oninput="debouncedRender()" onclick="event.stopPropagation()" autocomplete="off">
+        </div>
+
+        <div class="table-wrapper" id="pdf-wrapper" style="max-height: none;">
+            <table class="seraj-table">
+                <thead>
+                    <tr>
+                        <th style="width: 46%; text-align: right;">المنتج / الفاتورة</th>
+                        <th style="width: 30%;">الكمية والإجمالي</th>
+                        <th style="width: 24%;">السعر</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+                <tfoot>
+                    <tr class="report-total-footer">
+                        <td colspan="3">
+                            إجمالي الأصناف: <span id="grandTotal" class="val-green" dir="ltr">0.00</span> ج<br>
+                            إجمالي الخصومات: <span id="grandDiscounts" class="val-red" dir="ltr">0.00</span> ج<br>
+                            صافي المبيعات: <span id="netTotal" class="val-yellow" style="font-size: 19px;" dir="ltr">0.00</span> ج
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- الشريط السفلي الموحد -->
+    <div class="unified-bottom-bar" onclick="event.stopPropagation()">
+        <button type="button" class="header-back-btn" onclick="goBackSmart()">
+            <span class="arrow">⬅</span>
+            <span class="text">BACK</span>
+        </button>
+
+        <div class="bottom-capsules">
+            <div class="capsule" onclick="toggleDurationMenu(event)">
+                📅 <span id="currentDurationLabelOutside">آخر 7 أيام</span>
+                <div class="dropdown-menu" id="durationDropdownOutside">
+                    <div class="dropdown-menu-item" onclick="filterByDate('اليوم', 'today')">اليوم</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('أمس', 'yesterday')">أمس</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('آخر 7 أيام', '7days')">آخر 7 أيام</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('هذا الشهر', 'this_month')">هذا الشهر</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('آخر 30 يوم', '30days')">آخر 30 يوم</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('الشهر الماضي', 'last_month')">الشهر الماضي</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('مدى العمل (الكل)', 'all_time')">مدى العمل (الكل)</div>
+                    <div class="dropdown-menu-item" onclick="openCustomDateModal()">📅 تاريخ مخصص...</div>
+                </div>
+            </div>
+
+            <div class="capsule print-btn" onclick="togglePrintOptions(event)">
+                🖨️ خيارات
+                <div class="dropdown-menu" id="floatingPrintMenu">
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('thermal')">🧾 طباعة حرارية (80mm)</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('a4')">🖨️ طباعة ورقة (A4)</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('pdf_export')">📄 مشاركة / تصدير PDF</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('excel_export')">📊 تصدير Excel</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة التاريخ المخصص -->
+    <div class="modal-overlay" id="customDateModal" onclick="window.SerajUI.closeModal('customDateModal')">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3>تحديد تاريخ مخصص</h3></div>
+            <div class="compact-row"><label>من تاريخ:</label><input type="date" id="dateFrom"></div>
+            <div class="compact-row"><label>إلى تاريخ:</label><input type="date" id="dateTo"></div>
+            <div class="compact-btns">
+                <button type="button" class="btn-close-ai" onclick="window.SerajUI.closeModal('customDateModal')">إلغاء</button>
+                <button type="button" class="btn-save-ai" onclick="applyCustomDate()">تطبيق البحث</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="print_manager.js"></script>
+
+    <script>
+        let currentDateFilter = '7days';
+        let currentDurationLabel = 'آخر 7 أيام';
+        let customDateFrom = null;
+        let customDateTo = null;
+        let lastComputedItems = [];
+        let lastTotals = { grandTotal: 0, discounts: 0, netSales: 0 };
+
+        const safeHTML = (v) => window.Utils.sanitizeHTML(v);
+        const round2 = (v) => window.Utils.round2(v);
+        const round4 = (v) => window.Utils.round4(v);
+
+        function updatePageBranding() {
+            const brand = window.PrintManager ? window.PrintManager.getShopBranding() : { shopName: window.APP_BRAND_CONFIG.appName };
+            document.title = `تقرير مبيعات مفصل - ${brand.shopName}`;
+        }
+
+        function closeAllMenus() {
+            ['durationDropdownOutside', 'floatingPrintMenu'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
+        }
+
+        function toggleDurationMenu(e) {
+            if (e) e.stopPropagation();
+            const m = document.getElementById('durationDropdownOutside');
+            const isVisible = m && m.style.display === 'block';
+            closeAllMenus();
+            if (m && !isVisible) m.style.display = 'block';
+        }
+
+        function togglePrintOptions(e) {
+            if (e) e.stopPropagation();
+            const m = document.getElementById('floatingPrintMenu');
+            const isVisible = m && m.style.display === 'block';
+            closeAllMenus();
+            if (m && !isVisible) m.style.display = 'block';
+        }
+
+        function goBackSmart() {
+            window.location.href = 'smart_accountant.html';
+        }
+
+        function checkDateFilter(itemDateVal) {
+            if (currentDateFilter === 'all_time') return true;
+            const itemIso = window.Utils.normalizeDateStr(itemDateVal);
+            if (!itemIso) return false;
+
+            const now = new Date();
+            const todayIso = window.Utils.getLocalDateString(now);
+
+            if (currentDateFilter === 'today') return itemIso === todayIso;
+            if (currentDateFilter === 'yesterday') {
+                const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+                return itemIso === window.Utils.getLocalDateString(y);
+            }
+            if (currentDateFilter === '7days') {
+                const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+                return itemIso >= window.Utils.getLocalDateString(d) && itemIso <= todayIso;
+            }
+            if (currentDateFilter === '30days') {
+                const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+                return itemIso >= window.Utils.getLocalDateString(d) && itemIso <= todayIso;
+            }
+            if (currentDateFilter === 'this_month') {
+                const firstM = window.Utils.getLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
+                return itemIso >= firstM && itemIso <= todayIso;
+            }
+            if (currentDateFilter === 'last_month') {
+                const lm = window.Utils.getLastMonthRange(now);
+                return itemIso >= lm.start && itemIso <= lm.end;
+            }
+            if (currentDateFilter === 'custom' && customDateFrom && customDateTo) {
+                return itemIso >= customDateFrom && itemIso <= customDateTo;
+            }
+            return false;
+        }
+
+        function filterByDate(label, val) {
+            currentDateFilter = val;
+            currentDurationLabel = label;
+            const outLbl = document.getElementById('currentDurationLabelOutside');
+            if (outLbl) outLbl.textContent = label;
+            closeAllMenus();
+            renderTable();
+        }
+
+        function openCustomDateModal() {
+            closeAllMenus();
+            window.SerajUI.openModal('customDateModal');
+        }
+
+        function applyCustomDate() {
+            const f = document.getElementById('dateFrom').value;
+            const t = document.getElementById('dateTo').value;
+            if (!f || !t) return SerajAlert('يرجى تحديد تاريخ البداية والنهاية.', 'error');
+            currentDateFilter = 'custom';
+            customDateFrom = f;
+            customDateTo = t;
+            currentDurationLabel = `${f} إلى ${t}`;
+            document.getElementById('currentDurationLabelOutside').textContent = 'تاريخ مخصص';
+            window.SerajUI.closeModal('customDateModal');
+            renderTable();
+        }
+
+        const debouncedRender = window.Utils.debounce(function() {
+            renderTable();
+        }, 160);
+
+        function renderTable() {
+            const normQ = window.Utils.normalizeName(document.getElementById('searchInput')?.value || '');
+            const invoices = DB.getSalesInvoices(false) || [];
+
+            const allItems = [];
+            let totalDiscounts = 0;
+
+            invoices.forEach(inv => {
+                if (!inv || inv.type === 'quotation' || inv.type === 'quote') return;
+                if (!checkDateFilter(inv.date || inv.timestamp)) return;
+
+                const isReturn = ['return', 'return_sale', 'sales_return'].includes(inv.type);
+                const invDisplayId = String(inv.invoiceNo || inv.id || '');
+                const invCust = String(inv.customer || inv.customerName || 'نقدي').trim();
+                const invDate = window.Utils.normalizeDateStr(inv.date, inv.timestamp);
+                const invTs = window.Utils.getSafeTime(inv.timestamp || invDate) || 0;
+
+                if (!normQ) {
+                    const disc = Math.max(0, round2(inv.discount));
+                    totalDiscounts = round2(totalDiscounts + (isReturn ? -disc : disc));
+                }
+
+                (inv.items || []).forEach(item => {
+                    if (!item) return;
+                    const name = String(item.name || '').trim();
+                    if (!name) return;
+
+                    if (normQ) {
+                        const hay = `${window.Utils.normalizeName(name)} ${window.Utils.normalizeName(invDisplayId)} ${window.Utils.normalizeName(invCust)}`;
+                        if (!hay.includes(normQ)) return;
+                    }
+
+                    const rawQty = Math.abs(round4(item.qty ?? item.quantity ?? 0));
+                    const rawPrice = round2(item.price);
+                    const rawTotal = Math.abs(round2(item.total !== undefined ? item.total : (rawQty * rawPrice)));
+
+                    const qty = isReturn ? -rawQty : rawQty;
+                    const itemTotal = isReturn ? -rawTotal : rawTotal;
+
+                    allItems.push({
+                        name,
+                        invoiceId: invDisplayId,
+                        rawInvId: inv.id,
+                        customer: invCust,
+                        date: invDate,
+                        qty,
+                        price: rawPrice,
+                        total: itemTotal,
+                        timestamp: invTs,
+                        isReturn
+                    });
+                });
+            });
+
+            allItems.sort((a, b) => {
+                if (b.timestamp !== a.timestamp) return b.timestamp - a.timestamp;
+                return window.Utils.extractSerialNum(b.rawInvId) - window.Utils.extractSerialNum(a.rawInvId);
+            });
+
+            lastComputedItems = allItems;
+            const tbody = document.getElementById('tableBody');
+
+            if (allItems.length === 0) {
+                lastTotals = { grandTotal: 0, discounts: 0, netSales: 0 };
+                tbody.innerHTML = `<tr><td colspan="3" style="padding: 24px; color: var(--text-muted);">لا توجد مبيعات أو حركات في هذه الفترة</td></tr>`;
+                document.getElementById('grandTotal').textContent = '0.00';
+                document.getElementById('grandDiscounts').textContent = '0.00';
+                document.getElementById('netTotal').textContent = '0.00';
+                return;
+            }
+
+            let grandTotal = 0;
+            tbody.innerHTML = allItems.map(item => {
+                grandTotal = round2(grandTotal + item.total);
+                const qtyText = Number(item.qty.toFixed(2)).toString();
+                const pillClass = item.isReturn ? 'total-pill return-pill' : 'total-pill';
+                const qtyClass = item.isReturn ? 'val-red' : '';
+                const returnTag = item.isReturn ? ` <span class="val-red" style="font-size: 12px;">(مرتجع)</span>` : '';
+
+                return `
+                    <tr>
+                        <td style="text-align: right;">
+                            <div>${safeHTML(item.name)}${returnTag}</div>
+                            <span class="cell-meta">فاتورة: <span class="invoice-number">${safeHTML(item.invoiceId)}</span> | ${safeHTML(item.customer)}</span>
+                            <span class="cell-meta">📅 ${safeHTML(item.date)}</span>
+                        </td>
+                        <td>
+                            <div class="${qtyClass}" dir="ltr">${safeHTML(qtyText)}</div>
+                            <div class="${pillClass}">${item.total.toFixed(2)} ج</div>
+                        </td>
+                        <td dir="ltr">${item.price.toFixed(2)}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            const netSales = round2(grandTotal - totalDiscounts);
+            lastTotals = { grandTotal, discounts: totalDiscounts, netSales };
+
+            document.getElementById('grandTotal').textContent = grandTotal.toFixed(2);
+            document.getElementById('grandDiscounts').textContent = totalDiscounts.toFixed(2);
+            document.getElementById('netTotal').textContent = netSales.toFixed(2);
+        }
+
+        // =========================================================================
+        // الطباعة (80mm / A4) و PDF (downloadRealPDF) و Excel
+        // =========================================================================
+        function _buildA4ReportHTML() {
+            const brand = window.PrintManager.getShopBranding();
+            const todayStr = window.Utils.getLocalDateString();
+            const rowsHtml = lastComputedItems.map((item, idx) => `
+                <tr>
+                    <td>${idx + 1}</td>
+                    <td style="text-align: right;">${safeHTML(item.name)}${item.isReturn ? ' (مرتجع)' : ''}</td>
+                    <td dir="ltr">${safeHTML(item.invoiceId)}</td>
+                    <td>${safeHTML(item.customer)}</td>
+                    <td>${safeHTML(item.date)}</td>
+                    <td dir="ltr" class="${item.isReturn ? 'val-red' : ''}">${Number(item.qty.toFixed(2))}</td>
+                    <td dir="ltr">${item.price.toFixed(2)}</td>
+                    <td dir="ltr" class="${item.isReturn ? 'val-red' : 'val-green'}">${item.total.toFixed(2)}</td>
+                </tr>
+            `).join('');
+
+            return `
+                <div dir="rtl" style="background:#fff; color:#000; padding:10px; font-family:Tahoma, Arial, sans-serif;">
+                    <div style="text-align:center; border-bottom:3px solid #000; padding-bottom:10px; margin-bottom:14px;">
+                        <h1 style="margin:0; font-size:24px;">${safeHTML(brand.shopName)} — تقرير مبيعات مفصل</h1>
+                        ${brand.shopPhone ? `<div style="font-size:13px; margin-top:3px;">ت: ${safeHTML(brand.shopPhone)}</div>` : ''}
+                        <div style="font-size:14px; font-weight:bold; margin-top:4px;">الفترة: ${safeHTML(currentDurationLabel)} | التاريخ: ${safeHTML(todayStr)}</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>م</th>
+                                <th style="text-align:right;">اسم المنتج</th>
+                                <th>الفاتورة</th>
+                                <th>العميل</th>
+                                <th>التاريخ</th>
+                                <th>الكمية</th>
+                                <th>السعر</th>
+                                <th>الإجمالي</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                    <div style="width:100%; max-width:380px; margin-right:auto; border:2px solid #000; border-radius:6px; padding:10px; margin-top:14px; background:#f8fafc;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>إجمالي الأصناف:</span><strong class="val-green">${lastTotals.grandTotal.toFixed(2)} ج</strong></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>إجمالي الخصومات:</span><strong class="val-red">${lastTotals.discounts.toFixed(2)} ج</strong></div>
+                        <div style="display:flex; justify-content:space-between; border-top:1px solid #000; padding-top:6px;"><span>صافي المبيعات:</span><strong>${lastTotals.netSales.toFixed(2)} ج</strong></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function printThermalReport() {
+            if (lastComputedItems.length === 0) return SerajAlert('لا توجد بيانات للطباعة!', 'info');
+            const brand = window.PrintManager.getShopBranding();
+            const rowsHtml = lastComputedItems.map(item => `
+                <tr>
+                    <td style="text-align:right; padding:4px 2px; border-bottom:1px dotted #333;">${safeHTML(item.name)}${item.isReturn ? ' (مرتجع)' : ''}</td>
+                    <td style="text-align:center; padding:4px 2px; border-bottom:1px dotted #333;" dir="ltr">${Number(item.qty.toFixed(2))}</td>
+                    <td style="text-align:center; padding:4px 2px; border-bottom:1px dotted #333;" dir="ltr">${item.price.toFixed(2)}</td>
+                    <td style="text-align:left; padding:4px 2px; border-bottom:1px dotted #333;" dir="ltr">${item.total.toFixed(2)}</td>
+                </tr>
+            `).join('');
+
+            const docHtml = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>تقرير مبيعات مفصل</title><style>@page{size:80mm auto;margin:0;}body{margin:0;padding:4mm 2mm;width:74mm;box-sizing:border-box;font-family:Tahoma,Arial,sans-serif;font-size:12px;color:#000;background:#fff;}</style></head><body>
+                <div style="text-align:center; border-bottom:2px dashed #000; padding-bottom:6px; margin-bottom:8px;">
+                    <div style="font-size:17px; font-weight:bold;">${safeHTML(brand.shopName)}</div>
+                    <div style="font-weight:bold;">تقرير مبيعات مفصل</div>
+                    <div>${safeHTML(currentDurationLabel)}</div>
+                </div>
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead><tr style="border-bottom:1px solid #000;"><th style="text-align:right;">الصنف</th><th>كمية</th><th>سعر</th><th style="text-align:left;">إجمالي</th></tr></thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+                <div style="border-top:2px dashed #000; margin-top:8px; padding-top:6px; font-weight:bold;">
+                    <div>إجمالي الأصناف: ${lastTotals.grandTotal.toFixed(2)} ج</div>
+                    <div>الخصومات: ${lastTotals.discounts.toFixed(2)} ج</div>
+                    <div style="font-size:14px; margin-top:4px;">صافي المبيعات: ${lastTotals.netSales.toFixed(2)} ج</div>
+                </div>
+                <div style="text-align:center; margin-top:10px; border-top:1px dashed #000; padding-top:6px;">${safeHTML(brand.footerNote)}</div>
+            </body></html>`;
+            window.PrintManager._printHtmlViaSafeIframe(docHtml);
+        }
+
+        function handlePrintAction(action) {
+            closeAllMenus();
+            if (lastComputedItems.length === 0) return SerajAlert('لا توجد بيانات في هذه الفترة!', 'info');
+
+            if (action === 'thermal') {
+                printThermalReport();
+            } else if (action === 'a4') {
+                window.PrintManager.printA4HTML(_buildA4ReportHTML(), 'تقرير مبيعات مفصل');
+            } else if (action === 'pdf_export') {
+                window.Utils.downloadRealPDF(_buildA4ReportHTML(), `Sales_Detailed_${window.Utils.getLocalDateString()}.pdf`);
+            } else if (action === 'excel_export') {
+                const excelData = [
+                    ['اسم المنتج', 'رقم الفاتورة', 'العميل', 'التاريخ', 'السعر', 'الكمية', 'الإجمالي'],
+                    ...lastComputedItems.map(item => [
+                        item.name + (item.isReturn ? ' (مرتجع)' : ''),
+                        item.invoiceId,
+                        item.customer,
+                        item.date,
+                        item.price,
+                        Number(item.qty.toFixed(2)),
+                        item.total
+                    ]),
+                    [],
+                    ['إجمالي الأصناف', '', '', '', '', '', lastTotals.grandTotal],
+                    ['إجمالي الخصومات', '', '', '', '', '', lastTotals.discounts],
+                    ['صافي المبيعات', '', '', '', '', '', lastTotals.netSales]
+                ];
+                window.PrintManager.exportToExcel(excelData, `Sales_Detailed_${window.Utils.getLocalDateString()}`);
+            }
+        }
+
+        async function initPage() {
+            await window.SerajMegaDB.ready;
+            DB.applySavedTheme();
+            window.SerajAuth.applyRoleGuards();
+            updatePageBranding();
+            renderTable();
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initPage();
+        });
+
+        window.addEventListener('seraj:updated', (e) => {
+            const col = e && e.detail ? e.detail.collection : null;
+            if (!col || ['all', 'sales_invoices', 'products', 'customers', 'store_settings'].includes(col)) {
+                updatePageBranding();
+                renderTable();
+            }
+        });
+
+        window.addEventListener('popstate', () => {
+            if (window.SerajUI._modalStack.length > 0) return;
+            goBackSmart();
+        });
+    </script>
+</body>
+</html>

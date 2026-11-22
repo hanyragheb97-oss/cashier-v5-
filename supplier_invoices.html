@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>فواتير مورد</title>
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0b0d1e">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="stylesheet" href="style.css">
+
+    <!-- المكتبات المحلية للعمل أوفلاين 100% -->
+    <script src="./libs/xlsx.full.min.js" defer></script>
+    <script src="./libs/html2pdf.bundle.min.js" defer></script>
+
+    <style>
+        .report-main-wrap {
+            max-width: 860px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 12px 12px 95px;
+            box-sizing: border-box;
+        }
+
+        .picker-card {
+            background-color: var(--card-bg-alt);
+            border: 2px solid var(--neon-border);
+            border-radius: 16px;
+            padding: 18px 14px;
+            margin-top: 20px;
+            box-shadow: 0 0 18px var(--neon-glow);
+        }
+
+        .picker-label {
+            display: block;
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--neon-border);
+            margin-bottom: 10px;
+            text-align: right;
+        }
+
+        .amount-pill {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 14px;
+            border: 1.5px solid var(--accent-red);
+            color: var(--accent-red);
+            background-color: var(--surface-subtle);
+            direction: ltr;
+        }
+
+        .amount-pill.unpaid-supplier {
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+
+        .return-tag {
+            font-size: 12px;
+            font-weight: bold;
+            color: var(--color-customer);
+            margin-right: 4px;
+        }
+
+        .report-total-footer td {
+            background-color: var(--table-header-bg);
+            border-top: 2px solid var(--neon-border);
+            padding: 14px 10px;
+            line-height: 1.8;
+            font-size: 15px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body class="page-records" onclick="closeAllMenus()">
+
+    <!-- الشاشة 1: اختيار المورد -->
+    <div id="select-supplier-view" class="view-section active-view">
+        <div class="header header-records">
+            <span>فواتير المورد</span>
+        </div>
+
+        <div class="report-main-wrap">
+            <div class="picker-card" onclick="event.stopPropagation()">
+                <label class="picker-label" for="supplierSearchInput">اختر المورد أولاً:</label>
+                <div class="search-container" style="margin-bottom: 0;">
+                    <input type="text" id="supplierSearchInput" class="search-input seraj-search-input" placeholder="اكتب اسم المورد أو الموبايل هنا..." oninput="debouncedSupplierSearch()" onclick="this.select()" autocomplete="off">
+                    <div id="supplierDropdown" class="dropdown-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- الشاشة 2: فواتير المورد المحدد -->
+    <div id="supplier-invoices-view" class="view-section">
+        <div class="header header-records">
+            <span id="invoiceHeaderTitle">فواتير المورد</span>
+        </div>
+
+        <div class="report-main-wrap">
+            <div class="search-container">
+                <input type="text" id="invoiceSearchInput" class="search-input seraj-search-input" placeholder="ابحث برقم الفاتورة أو الملاحظات..." oninput="debouncedInvoicesRender()" onclick="event.stopPropagation()" autocomplete="off">
+            </div>
+
+            <div class="table-wrapper" id="pdf-wrapper" style="max-height: none;">
+                <table class="seraj-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 56%; text-align: right;">تفاصيل الفاتورة</th>
+                            <th style="width: 44%;">إجمالي الفاتورة</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                    <tfoot>
+                        <tr class="report-total-footer">
+                            <td colspan="2">
+                                صافي فواتير الفترة (<span id="invoicesCountBadge">0</span>): <span id="grandNetTotal" class="color-supplier" dir="ltr">0.00</span> ج<br>
+                                المتبقي الآجل من هذه الفواتير: <span id="grandRemainingTotal" class="val-green" dir="ltr">0.00</span> ج
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- الشريط السفلي الموحد -->
+    <div class="unified-bottom-bar" onclick="event.stopPropagation()">
+        <button type="button" class="header-back-btn" onclick="handleSmartBack()">
+            <span class="arrow">⬅</span>
+            <span class="text">BACK</span>
+        </button>
+
+        <div class="bottom-capsules">
+            <div class="capsule" onclick="toggleDurationMenu(event)">
+                📅 <span id="currentDurationLabelOutside">آخر 7 أيام</span>
+                <div class="dropdown-menu" id="durationDropdownOutside">
+                    <div class="dropdown-menu-item" onclick="filterByDate('اليوم', 'today')">اليوم</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('أمس', 'yesterday')">أمس</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('آخر 7 أيام', '7days')">آخر 7 أيام</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('هذا الشهر', 'this_month')">هذا الشهر</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('آخر 30 يوم', '30days')">آخر 30 يوم</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('الشهر الماضي', 'last_month')">الشهر الماضي</div>
+                    <div class="dropdown-menu-item" onclick="filterByDate('مدى العمل (الكل)', 'all_time')">مدى العمل (الكل)</div>
+                    <div class="dropdown-menu-item" onclick="openCustomDateModal()">📅 تاريخ مخصص...</div>
+                </div>
+            </div>
+
+            <div class="capsule print-btn" onclick="togglePrintOptions(event)">
+                🖨️ خيارات
+                <div class="dropdown-menu" id="floatingPrintMenu">
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('thermal')">🧾 طباعة حرارية (80mm)</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('a4')">🖨️ طباعة ورقة (A4)</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('pdf_export')">📄 مشاركة / تصدير PDF</div>
+                    <div class="dropdown-menu-item" onclick="handlePrintAction('excel_export')">📊 تصدير Excel</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة التاريخ المخصص -->
+    <div class="modal-overlay" id="customDateModal" onclick="window.SerajUI.closeModal('customDateModal')">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3>تحديد تاريخ مخصص</h3></div>
+            <div class="compact-row"><label>من تاريخ:</label><input type="date" id="dateFrom"></div>
+            <div class="compact-row"><label>إلى تاريخ:</label><input type="date" id="dateTo"></div>
+            <div class="compact-btns">
+                <button type="button" class="btn-close-ai" onclick="window.SerajUI.closeModal('customDateModal')">إلغاء</button>
+                <button type="button" class="btn-save-ai" onclick="applyCustomDate()">تطبيق البحث</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="print_manager.js"></script>
+
+    <script>
+        let selectedSupplierName = null;
+        let selectedSupplierId = null;
+        let currentDateFilter = '7days';
+        let currentDurationLabel = 'آخر 7 أيام';
+        let customDateFrom = null;
+        let customDateTo = null;
+        let lastInvoicesList = [];
+        let lastTotals = { netTotal: 0, remainingTotal: 0 };
+
+        const safeHTML = (v) => window.Utils.sanitizeHTML(v);
+        const round2 = (v) => window.Utils.round2(v);
+
+        function updatePageBranding() {
+            const brand = window.PrintManager ? window.PrintManager.getShopBranding() : { shopName: window.APP_BRAND_CONFIG.appName };
+            document.title = `فواتير مورد - ${brand.shopName}`;
+        }
+
+        function switchView(viewId) {
+            document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active-view'));
+            document.getElementById(viewId).classList.add('active-view');
+        }
+
+        function handleSmartBack(fromPopState = false) {
+            closeAllMenus();
+            if (document.getElementById('supplier-invoices-view').classList.contains('active-view')) {
+                selectedSupplierName = null;
+                selectedSupplierId = null;
+                document.getElementById('supplierSearchInput').value = '';
+                if (!fromPopState && history.state && history.state.view === 'invoices') {
+                    history.back();
+                } else {
+                    switchView('select-supplier-view');
+                    setTimeout(() => document.getElementById('supplierSearchInput')?.focus(), 80);
+                }
+            } else if (!fromPopState) {
+                localStorage.setItem('seraj_active_tab', 'الموردين');
+                window.location.href = 'smart_accountant.html';
+            }
+        }
+
+        function closeAllMenus() {
+            ['durationDropdownOutside', 'floatingPrintMenu', 'supplierDropdown'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
+        }
+
+        function toggleDurationMenu(e) {
+            if (e) e.stopPropagation();
+            const m = document.getElementById('durationDropdownOutside');
+            const isVisible = m && m.style.display === 'block';
+            closeAllMenus();
+            if (m && !isVisible) m.style.display = 'block';
+        }
+
+        function togglePrintOptions(e) {
+            if (e) e.stopPropagation();
+            const m = document.getElementById('floatingPrintMenu');
+            const isVisible = m && m.style.display === 'block';
+            closeAllMenus();
+            if (m && !isVisible) m.style.display = 'block';
+        }
+
+        // =========================================================================
+        // البحث واختيار المورد (debounce + join('') + Pointer Guard)
+        // =========================================================================
+        const debouncedSupplierSearch = window.Utils.debounce(function() {
+            handleSupplierSearch();
+        }, 160);
+
+        function handleSupplierSearch() {
+            const rawVal = (document.getElementById('supplierSearchInput')?.value || '').trim();
+            const normQ = window.Utils.normalizeName(rawVal);
+            const dropdown = document.getElementById('supplierDropdown');
+            if (!dropdown) return;
+
+            if (!normQ) {
+                dropdown.style.display = 'none';
+                dropdown.innerHTML = '';
+                return;
+            }
+
+            const allSuppliers = DB.getSuppliers(false, false) || [];
+            const filtered = allSuppliers.filter(s => {
+                if (!s || !s.name) return false;
+                const hay = `${window.Utils.normalizeName(s.name)} ${window.Utils.normalizeName(s.phone || '')}`;
+                return hay.includes(normQ);
+            }).slice(0, 30);
+
+            if (filtered.length === 0) {
+                dropdown.style.display = 'none';
+                dropdown.innerHTML = '';
+                return;
+            }
+
+            dropdown.innerHTML = filtered.map(s => `
+                <div class="list-search-item" data-sid="${safeHTML(s.id)}" data-sname="${safeHTML(s.name)}">
+                    <span>${safeHTML(s.name)}</span>
+                    ${s.phone ? `<span class="text-muted" style="font-size:13px;" dir="ltr">${safeHTML(s.phone)}</span>` : ''}
+                </div>
+            `).join('');
+            dropdown.style.display = 'block';
+
+            dropdown.querySelectorAll('.list-search-item[data-sid]').forEach(el => {
+                window.SerajUI.bindSafeTap(el, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    confirmSupplierSelection(el.getAttribute('data-sname'), el.getAttribute('data-sid'));
+                }, 250);
+            });
+        }
+
+        function confirmSupplierSelection(name, id = null) {
+            closeAllMenus();
+            selectedSupplierName = name;
+            selectedSupplierId = id;
+            document.getElementById('invoiceHeaderTitle').innerHTML = `فواتير المورد: <span class="tag-supplier">${safeHTML(name)}</span>`;
+            document.getElementById('invoiceSearchInput').value = '';
+            switchView('supplier-invoices-view');
+            if (!(history.state && history.state.view === 'invoices')) {
+                history.pushState({ view: 'invoices' }, '');
+            }
+            renderInvoicesTable();
+        }
+
+        // =========================================================================
+        // الفلترة الزمنية المحلية الدقيقة (مع إصلاح يوم 31 في الشهر الماضي)
+        // =========================================================================
+        function checkDateFilter(itemDateVal) {
+            if (currentDateFilter === 'all_time') return true;
+            const itemIso = window.Utils.normalizeDateStr(itemDateVal);
+            if (!itemIso) return false;
+
+            const now = new Date();
+            const todayIso = window.Utils.getLocalDateString(now);
+
+            if (currentDateFilter === 'today') return itemIso === todayIso;
+            if (currentDateFilter === 'yesterday') {
+                const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+                return itemIso === window.Utils.getLocalDateString(y);
+            }
+            if (currentDateFilter === '7days') {
+                const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+                return itemIso >= window.Utils.getLocalDateString(d) && itemIso <= todayIso;
+            }
+            if (currentDateFilter === '30days') {
+                const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+                return itemIso >= window.Utils.getLocalDateString(d) && itemIso <= todayIso;
+            }
+            if (currentDateFilter === 'this_month') {
+                const firstM = window.Utils.getLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
+                return itemIso >= firstM && itemIso <= todayIso;
+            }
+            if (currentDateFilter === 'last_month') {
+                const lm = window.Utils.getLastMonthRange(now);
+                return itemIso >= lm.start && itemIso <= lm.end;
+            }
+            if (currentDateFilter === 'custom' && customDateFrom && customDateTo) {
+                return itemIso >= customDateFrom && itemIso <= customDateTo;
+            }
+            return false;
+        }
+
+        function filterByDate(label, val) {
+            currentDateFilter = val;
+            currentDurationLabel = label;
+            document.getElementById('currentDurationLabelOutside').textContent = label;
+            closeAllMenus();
+            if (selectedSupplierName) renderInvoicesTable();
+        }
+
+        function openCustomDateModal() {
+            closeAllMenus();
+            window.SerajUI.openModal('customDateModal');
+        }
+
+        function applyCustomDate() {
+            const f = document.getElementById('dateFrom').value;
+            const t = document.getElementById('dateTo').value;
+            if (!f || !t) return SerajAlert('يرجى تحديد تاريخ البداية والنهاية.', 'error');
+            currentDateFilter = 'custom';
+            customDateFrom = f;
+            customDateTo = t;
+            currentDurationLabel = `${f} إلى ${t}`;
+            document.getElementById('currentDurationLabelOutside').textContent = 'تاريخ مخصص';
+            window.SerajUI.closeModal('customDateModal');
+            if (selectedSupplierName) renderInvoicesTable();
+        }
+
+        // =========================================================================
+        // بناء جدول فواتير المورد (DB._computeInvoiceNetTotal + join('') + debounce)
+        // =========================================================================
+        const debouncedInvoicesRender = window.Utils.debounce(function() {
+            renderInvoicesTable();
+        }, 160);
+
+        function renderInvoicesTable() {
+            if (!selectedSupplierName) return;
+
+            // تحديث تسويات السندات لضمان دقة computedRemaining
+            DB.calculateSupplierBalances(selectedSupplierId);
+
+            const allPurchases = DB.getPurchaseInvoices(false) || [];
+            const normSearch = window.Utils.normalizeName(document.getElementById('invoiceSearchInput')?.value || '');
+            const normSuppTarget = window.Utils.normalizeName(selectedSupplierName);
+
+            const supplierInvoices = [];
+
+            allPurchases.forEach(inv => {
+                if (!inv || inv.type === 'quotation' || inv.type === 'quote') return;
+
+                const sName = String(inv.supplier || inv.supplierName || '').trim();
+                const matchById = (selectedSupplierId && inv.supplierId && String(inv.supplierId) === String(selectedSupplierId));
+                const matchByName = (window.Utils.normalizeName(sName) === normSuppTarget);
+                if (!matchById && !matchByName) return;
+
+                const invDate = window.Utils.normalizeDateStr(inv.date, inv.timestamp);
+                if (!checkDateFilter(invDate)) return;
+
+                const invNo = String(inv.invoiceNo || inv.id || '');
+                const invNotes = String(inv.notes || '').trim();
+                if (normSearch) {
+                    const hay = `${window.Utils.normalizeName(invNo)} ${window.Utils.normalizeName(inv.id || '')} ${window.Utils.normalizeName(invNotes)}`;
+                    if (!hay.includes(normSearch)) return;
+                }
+
+                const isReturn = ['return', 'return_purchase', 'purchase_return'].includes(inv.type);
+                const finalReq = DB._computeInvoiceNetTotal(inv);
+                const paid = round2(inv.paid);
+                const rem = isReturn ? 0 : round2(inv.computedRemaining !== undefined ? inv.computedRemaining : (inv.remaining || 0));
+
+                supplierInvoices.push({
+                    id: inv.id,
+                    invoiceNo: invNo,
+                    date: invDate,
+                    total: finalReq,
+                    paid: paid,
+                    rem: rem,
+                    notes: invNotes,
+                    isReturn: isReturn,
+                    timestamp: window.Utils.getSafeTime(inv.timestamp || invDate) || 0
+                });
+            });
+
+            supplierInvoices.sort((a, b) => {
+                if (b.timestamp !== a.timestamp) return b.timestamp - a.timestamp;
+                return window.Utils.extractSerialNum(b.id) - window.Utils.extractSerialNum(a.id);
+            });
+
+            lastInvoicesList = supplierInvoices;
+            const tbody = document.getElementById('tableBody');
+
+            if (supplierInvoices.length === 0) {
+                lastTotals = { netTotal: 0, remainingTotal: 0 };
+                tbody.innerHTML = `<tr><td colspan="2" style="padding: 24px; color: var(--text-muted);">لا توجد فواتير مطابقة لهذا المورد في هذه الفترة</td></tr>`;
+                document.getElementById('invoicesCountBadge').textContent = '0';
+                document.getElementById('grandNetTotal').textContent = '0.00';
+                document.getElementById('grandRemainingTotal').textContent = '0.00';
+                return;
+            }
+
+            let netTotal = 0;
+            let remainingTotal = 0;
+
+            tbody.innerHTML = supplierInvoices.map(inv => {
+                netTotal = round2(netTotal + (inv.isReturn ? -inv.total : inv.total));
+                if (!inv.isReturn && inv.rem > 0.009) {
+                    remainingTotal = round2(remainingTotal + inv.rem);
+                }
+
+                const returnLabel = inv.isReturn ? `<span class="return-tag">(مرتجع مشتريات)</span>` : '';
+                const pillClass = (inv.rem > 0.009 && !inv.isReturn) ? 'amount-pill unpaid-supplier' : 'amount-pill';
+                const remMeta = (!inv.isReturn && inv.rem > 0.009)
+                    ? `<span class="cell-meta val-green">متبقي له: ${inv.rem.toFixed(2)} ج</span>`
+                    : `<span class="cell-meta">${inv.isReturn ? 'مرتجع' : 'مسددة بالكامل'}</span>`;
+                const notesMeta = inv.notes ? `<span class="cell-meta color-notes">📝 ${safeHTML(inv.notes)}</span>` : '';
+
+                return `
+                    <tr>
+                        <td style="text-align: right;">
+                            <div>فاتورة رقم: <span class="invoice-number">${safeHTML(inv.invoiceNo)}</span> ${returnLabel}</div>
+                            <span class="cell-meta">📅 ${safeHTML(inv.date)}</span>
+                            ${notesMeta}
+                        </td>
+                        <td>
+                            <div class="${pillClass}">${inv.total.toFixed(2)} ج</div>
+                            ${remMeta}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            lastTotals = { netTotal, remainingTotal };
+            document.getElementById('invoicesCountBadge').textContent = String(supplierInvoices.length);
+            document.getElementById('grandNetTotal').textContent = netTotal.toFixed(2);
+            document.getElementById('grandRemainingTotal').textContent = remainingTotal.toFixed(2);
+        }
+
+        // =========================================================================
+        // الطباعة (فصل 80mm عن A4) و PDF (downloadRealPDF) و Excel
+        // =========================================================================
+        function _buildA4ReportHTML() {
+            const brand = window.PrintManager.getShopBranding();
+            const todayStr = window.Utils.getLocalDateString();
+            const rowsHtml = lastInvoicesList.map((inv, idx) => `
+                <tr>
+                    <td>${idx + 1}</td>
+                    <td dir="ltr">${safeHTML(inv.invoiceNo)}${inv.isReturn ? ' (مرتجع)' : ''}</td>
+                    <td>${safeHTML(inv.date)}</td>
+                    <td dir="ltr" class="${inv.isReturn ? 'val-red' : ''}">${inv.total.toFixed(2)}</td>
+                    <td dir="ltr">${inv.paid.toFixed(2)}</td>
+                    <td dir="ltr" class="${inv.rem > 0.009 ? 'val-green' : ''}">${inv.rem.toFixed(2)}</td>
+                </tr>
+            `).join('');
+
+            return `
+                <div dir="rtl" style="background:#fff; color:#000; padding:10px; font-family:Tahoma, Arial, sans-serif;">
+                    <div style="text-align:center; border-bottom:3px solid #000; padding-bottom:10px; margin-bottom:14px;">
+                        <h1 style="margin:0; font-size:24px;">${safeHTML(brand.shopName)} — فواتير المورد</h1>
+                        ${brand.shopPhone ? `<div style="font-size:13px; margin-top:3px;">ت: ${safeHTML(brand.shopPhone)}</div>` : ''}
+                        <div style="font-size:15px; font-weight:bold; margin-top:4px;">المورد: ${safeHTML(selectedSupplierName)}</div>
+                        <div style="font-size:13px; font-weight:bold; margin-top:3px;">الفترة: ${safeHTML(currentDurationLabel)} | التاريخ: ${safeHTML(todayStr)}</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>م</th>
+                                <th>رقم الفاتورة</th>
+                                <th>التاريخ</th>
+                                <th>الإجمالي</th>
+                                <th>المدفوع</th>
+                                <th>المتبقي له</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                    <div style="width:100%; max-width:360px; margin-right:auto; border:2px solid #000; border-radius:6px; padding:10px; margin-top:14px; background:#f8fafc;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span>صافي فواتير الفترة (${lastInvoicesList.length}):</span><strong>${lastTotals.netTotal.toFixed(2)} ج</strong></div>
+                        <div style="display:flex; justify-content:space-between; border-top:1px solid #000; padding-top:6px;"><span>المتبقي الآجل للمورد:</span><strong class="val-green">${lastTotals.remainingTotal.toFixed(2)} ج</strong></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function printThermalReport() {
+            const brand = window.PrintManager.getShopBranding();
+            const rowsHtml = lastInvoicesList.map(inv => `
+                <tr>
+                    <td style="text-align:right; padding:4px 2px; border-bottom:1px dotted #333;">${safeHTML(inv.invoiceNo)}${inv.isReturn ? ' (مرتجع)' : ''}</td>
+                    <td style="text-align:center; padding:4px 2px; border-bottom:1px dotted #333;">${safeHTML(inv.date)}</td>
+                    <td style="text-align:left; padding:4px 2px; border-bottom:1px dotted #333; font-weight:bold;" dir="ltr">${inv.total.toFixed(2)}</td>
+                </tr>
+            `).join('');
+
+            const docHtml = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فواتير المورد</title><style>@page{size:80mm auto;margin:0;}body{margin:0;padding:4mm 2mm;width:74mm;box-sizing:border-box;font-family:Tahoma,Arial,sans-serif;font-size:12px;color:#000;background:#fff;}</style></head><body>
+                <div style="text-align:center; border-bottom:2px dashed #000; padding-bottom:6px; margin-bottom:8px;">
+                    <div style="font-size:17px; font-weight:bold;">${safeHTML(brand.shopName)}</div>
+                    <div style="font-weight:bold;">فواتير المورد: ${safeHTML(selectedSupplierName)}</div>
+                    <div>${safeHTML(currentDurationLabel)}</div>
+                </div>
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead><tr style="border-bottom:1px solid #000;"><th style="text-align:right;">الفاتورة</th><th>التاريخ</th><th style="text-align:left;">الإجمالي</th></tr></thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+                <div style="border-top:2px dashed #000; margin-top:8px; padding-top:6px; font-weight:bold; line-height:1.6;">
+                    <div>صافي الفواتير: ${lastTotals.netTotal.toFixed(2)} ج</div>
+                    <div>المتبقي الآجل: ${lastTotals.remainingTotal.toFixed(2)} ج</div>
+                </div>
+                <div style="text-align:center; margin-top:10px; border-top:1px dashed #000; padding-top:6px;">${safeHTML(brand.footerNote)}</div>
+            </body></html>`;
+            window.PrintManager._printHtmlViaSafeIframe(docHtml);
+        }
+
+        function handlePrintAction(action) {
+            closeAllMenus();
+            if (!selectedSupplierName) return SerajAlert('الرجاء اختيار مورد أولاً لعرض فواتيره.', 'info');
+            if (lastInvoicesList.length === 0) return SerajAlert('لا توجد فواتير في هذه الفترة!', 'info');
+
+            const safeName = String(selectedSupplierName).replace(/[/\\?*:[\]\s]+/g, '_').slice(0, 25);
+
+            if (action === 'thermal') {
+                printThermalReport();
+            } else if (action === 'a4') {
+                window.PrintManager.printA4HTML(_buildA4ReportHTML(), `فواتير المورد - ${selectedSupplierName}`);
+            } else if (action === 'pdf_export') {
+                window.Utils.downloadRealPDF(_buildA4ReportHTML(), `Supplier_Invoices_${safeName}.pdf`);
+            } else if (action === 'excel_export') {
+                const excelData = [
+                    ['رقم الفاتورة', 'النوع', 'التاريخ', 'إجمالي الفاتورة', 'المدفوع', 'المتبقي له', 'ملاحظات'],
+                    ...lastInvoicesList.map(inv => [
+                        inv.invoiceNo,
+                        inv.isReturn ? 'مرتجع مشتريات' : 'فاتورة مشتريات',
+                        inv.date,
+                        inv.total,
+                        inv.paid,
+                        inv.rem,
+                        inv.notes
+                    ]),
+                    [],
+                    ['صافي فواتير الفترة', '', '', lastTotals.netTotal, '', lastTotals.remainingTotal, '']
+                ];
+                window.PrintManager.exportToExcel(excelData, `Supplier_Invoices_${safeName}`);
+            }
+        }
+
+        async function initPage() {
+            await window.SerajMegaDB.ready;
+            DB.applySavedTheme();
+            window.SerajAuth.applyRoleGuards();
+            updatePageBranding();
+            setTimeout(() => document.getElementById('supplierSearchInput')?.focus(), 100);
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initPage();
+        });
+
+        window.addEventListener('seraj:updated', (e) => {
+            const col = e && e.detail ? e.detail.collection : null;
+            if (!col || ['all', 'purchase_invoices', 'suppliers', 'supplier_vouchers', 'treasury_moves', 'store_settings'].includes(col)) {
+                updatePageBranding();
+                if (selectedSupplierName) renderInvoicesTable();
+            }
+        });
+
+        window.addEventListener('popstate', () => {
+            if (window.SerajUI._modalStack.length > 0) return;
+            if (document.getElementById('supplier-invoices-view').classList.contains('active-view')) {
+                handleSmartBack(true);
+            }
+        });
+    </script>
+</body>
+</html>
