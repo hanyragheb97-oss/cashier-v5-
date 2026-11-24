@@ -34,9 +34,9 @@ function buildAIBrainUI() {
     // رسم الشاشة والزرار
     const style = document.createElement('style');
     style.innerHTML = `
-        #ai-fab { position: fixed; bottom: 82px; right: 18px; left: auto; width: 54px; height: 54px; background: var(--btn-nav-bg, #1e3a8a); color: var(--btn-nav-text, #ffffff); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 0 18px var(--neon-glow, rgba(37,99,235,0.5)); z-index: 910; border: 2px solid var(--neon-border, #3b82f6); transition: transform 0.2s; }
+        #ai-fab { position: fixed; bottom: 80px; left: 20px; right: auto; width: 60px; height: 60px; background: var(--btn-nav-bg, #1e3a8a); color: var(--btn-nav-text, #ffffff); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 15px var(--neon-glow, rgba(37,99,235,0.5)); z-index: 9999; border: 2px solid var(--neon-border, #3b82f6); transition: transform 0.2s; }
         #ai-fab:active { transform: scale(0.92); }
-        #ai-chat-window { position: fixed; bottom: 144px; right: 14px; left: auto; width: 380px; max-width: calc(100vw - 28px); height: 520px; max-height: calc(100dvh - 165px); background: var(--bg-dark-2, #0b0d1e); color: var(--text-main, #ffffff); border: 2px solid var(--neon-border, #3b82f6); border-radius: 15px; box-shadow: 0 10px 28px var(--shadow-dark, rgba(0,0,0,0.45)); display: none; flex-direction: column; z-index: 9999; overflow: hidden; font-family: inherit; direction: rtl; }
+        #ai-chat-window { position: fixed; bottom: 150px; left: 20px; right: auto; width: 380px; max-width: calc(100vw - 28px); height: 520px; max-height: calc(100dvh - 165px); background: var(--bg-dark-2, #0b0d1e); color: var(--text-main, #ffffff); border: 2px solid var(--neon-border, #3b82f6); border-radius: 15px; box-shadow: 0 10px 28px var(--shadow-dark, rgba(0,0,0,0.45)); display: none; flex-direction: column; z-index: 9999; overflow: hidden; font-family: inherit; direction: rtl; }
         #ai-header { background: var(--btn-nav-bg, #1e3a8a); color: var(--btn-nav-text, #ffffff); padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
         #ai-toggle-container { display: flex; align-items: center; gap: 8px; font-size: 14px; background: rgba(255,255,255,0.18); padding: 5px 10px; border-radius: 20px; }
         .switch { position: relative; display: inline-block; width: 40px; height: 20px; margin: 0; }
@@ -72,7 +72,7 @@ function buildAIBrainUI() {
     `;
 
     const uiHTML = `
-        <div id="ai-fab" class="seraj-ai-floating-btn" title="المحاسب الذكي">${robotSvg}</div>
+        <div id="ai-fab" title="المحاسب الذكي">${robotSvg}</div>
         <div id="ai-chat-window">
             <div id="ai-header">
                 <span style="font-weight:bold; font-size: 16px;">المساعد الذكي</span>

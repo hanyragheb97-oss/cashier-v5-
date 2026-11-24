@@ -1118,7 +1118,15 @@ function getSafeTimeMs(val) {
             });
         }
 
-        window.addEventListener('DOMContentLoaded', () => {
+        window.addEventListener('DOMContentLoaded', async () => {
+            if (window.SerajMegaDB && window.SerajMegaDB.ready) {
+                await window.SerajMegaDB.ready;
+            }
+            populateSuppliers();
+            calculateOverviewStats();
+            calculateCollectedData();
+            runSmartInventory('shortages');
+            runSmartInventory('suppliers');
             renderNotesList();
         });
 
@@ -1147,6 +1155,8 @@ function getSafeTimeMs(val) {
                 }
             };
         window.addEventListener('seraj:updated', _refreshSmartAccountantUI);
+        window.addEventListener('seraj:dbReady', _refreshSmartAccountantUI);
+        window.addEventListener('seraj:cloudReady', _refreshSmartAccountantUI);
 
         function openNoteModal(noteId) {
             let modal = document.getElementById('note-modal');
