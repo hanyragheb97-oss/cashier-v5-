@@ -638,6 +638,25 @@ window.SerajUI = {
     _mediaStoppers: new Map(),
     _isHandlingPop: false,
     _ignoringBackCount: 0,
+    _clickShieldUntil: 0,
+    _clickShieldBound: false,
+
+    armClickShield: function(durationMs = 420) {
+        let until = Date.now() + Math.max(150, Number(durationMs) || 420);
+        if (until > this._clickShieldUntil) this._clickShieldUntil = until;
+        if (!this._clickShieldBound && typeof document !== 'undefined') {
+            this._clickShieldBound = true;
+            document.addEventListener('click', (ev) => {
+                if (Date.now() < this._clickShieldUntil) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    if (typeof ev.stopImmediatePropagation === 'function') {
+                        ev.stopImmediatePropagation();
+                    }
+                }
+            }, true);
+        }
+    },
 
     registerMediaStopper: function(key, stopFn) {
         if (key && typeof stopFn === 'function') {
@@ -685,6 +704,7 @@ window.SerajUI = {
         }
 
         this._modalStack.push(entry);
+        this.armClickShield(360);
         return true;
     },
 
@@ -737,13 +757,19 @@ window.SerajUI = {
                 this._ignoringBackCount = Math.max(0, this._ignoringBackCount - 1);
             }
         }
+        this.armClickShield(360);
         return true;
     },
 
-    // حارس اللمس لمنع تكرار الضغط (+2) على شاشات الموبايل
-    bindSafeTap: function(element, handler, cooldownMs = 350) {
+    // حارس اللمس لمنع تكرار الضغط واختراق الضغطة (Ghost Click) والاختيار أثناء التمرير
+    bindSafeTap: function(element, handler, cooldownMs = 380) {
         if (!element || typeof handler !== 'function') return;
         let lastFire = 0;
+        let startX = 0;
+        let startY = 0;
+        let isDown = false;
+        let moved = false;
+
         const wrapped = (e) => {
             let now = Date.now();
             if (now - lastFire < cooldownMs) {
@@ -752,15 +778,40 @@ window.SerajUI = {
                 return;
             }
             lastFire = now;
+            this.armClickShield(Math.max(400, cooldownMs));
             handler(e);
         };
+
         if (window.PointerEvent) {
-            element.addEventListener('pointerup', (e) => {
+            element.addEventListener('pointerdown', (e) => {
                 if (e.button !== undefined && e.button !== 0) return;
+                startX = e.clientX;
+                startY = e.clientY;
+                isDown = true;
+                moved = false;
+            });
+            element.addEventListener('pointermove', (e) => {
+                if (!isDown) return;
+                if (Math.abs(e.clientX - startX) > 10 || Math.abs(e.clientY - startY) > 10) {
+                    moved = true;
+                }
+            });
+            element.addEventListener('pointercancel', () => {
+                isDown = false;
+                moved = true;
+            });
+            element.addEventListener('pointerup', (e) => {
+                if (!isDown || moved || (e.button !== undefined && e.button !== 0)) {
+                    isDown = false;
+                    return;
+                }
+                isDown = false;
+                e.preventDefault();
+                e.stopPropagation();
                 wrapped(e);
             });
             element.addEventListener('click', (e) => {
-                if (Date.now() - lastFire < cooldownMs) {
+                if (Date.now() - lastFire < cooldownMs || Date.now() < this._clickShieldUntil) {
                     e.preventDefault();
                     e.stopPropagation();
                 }
@@ -1341,19 +1392,21 @@ window.Utils = {
 
             let modal = document.createElement('div');
             modal.id = 'seraj-pdf-preview-modal';
-            modal.style.cssText = 'position:fixed; inset:0; width:100%; height:100%; background:rgba(7,9,19,0.96); z-index:999999; display:none; flex-direction:column; direction:rtl;';
+            modal.style.cssText = 'position:fixed; inset:0; width:100%; height:100vh; height:100dvh; background:rgba(7,9,19,0.96); z-index:999999; display:none; flex-direction:column; direction:rtl;';
 
             modal.innerHTML = `
                 <div style="background:#0b0d1e; border-bottom:2px solid var(--neon-border, #0ea5e9); padding:12px 16px; display:flex; justify-content:space-between; align-items:center; color:#fff; flex-shrink:0;">
                     <span style="font-size:17px; font-weight:bold;">📄 معاينة المستند قبل المشاركة</span>
                     <button type="button" id="seraj-pdf-close-top" style="background:#ef4444; color:#fff; border:none; border-radius:8px; padding:6px 14px; font-weight:bold; font-size:15px; cursor:pointer;">✖ إغلاق</button>
                 </div>
-                <div id="seraj-pdf-scroll-area" style="flex:1; overflow:auto; padding:15px 10px; display:flex; justify-content:center; align-items:flex-start;">
-                    <div id="seraj-pdf-preview-sheet" class="seraj-pdf-paper-sheet" style="width:794px; max-width:100%; background:#ffffff; color:#000000; padding:22px; border-radius:8px;">
-                        ${safeHtmlContent}
+                <div id="seraj-pdf-scroll-area" style="flex:1; min-height:0; overflow:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:12px 8px; display:block;">
+                    <div id="seraj-pdf-scale-frame" style="margin:0 auto; overflow:hidden;">
+                        <div id="seraj-pdf-preview-sheet" class="seraj-pdf-paper-sheet" style="width:794px; max-width:none; background:#ffffff; color:#000000; padding:22px; border-radius:8px; transform-origin:top right;">
+                            ${safeHtmlContent}
+                        </div>
                     </div>
                 </div>
-                <div style="background:#0b0d1e; border-top:2px solid var(--neon-border, #0ea5e9); padding:12px 15px; display:flex; gap:10px; justify-content:center; align-items:center; flex-shrink:0;">
+                <div style="background:#0b0d1e; border-top:2px solid var(--neon-border, #0ea5e9); padding:12px 15px max(12px, env(safe-area-inset-bottom)) 15px; display:flex; gap:10px; justify-content:center; align-items:center; flex-shrink:0;">
                     <button type="button" id="seraj-pdf-share-btn" style="flex:2; background:#10b981; color:#000; border:none; border-radius:12px; padding:12px; font-size:15px; font-weight:bold; cursor:pointer; display:flex; justify-content:center; align-items:center; gap:6px;">
                         ⏳ جاري تجهيز الملف...
                     </button>
@@ -1364,6 +1417,20 @@ window.Utils = {
             `;
 
             document.body.appendChild(modal);
+
+            const fitPreviewSheetToViewport = () => {
+                let scrollArea = modal.querySelector('#seraj-pdf-scroll-area');
+                let scaleFrame = modal.querySelector('#seraj-pdf-scale-frame');
+                let previewSheet = modal.querySelector('#seraj-pdf-preview-sheet');
+                if (!scrollArea || !scaleFrame || !previewSheet) return;
+                let availW = Math.max(280, (scrollArea.clientWidth || window.innerWidth) - 16);
+                let scale = Math.min(1, availW / 794);
+                previewSheet.style.transform = scale < 0.999 ? `scale(${scale})` : 'none';
+                scaleFrame.style.width = Math.round(794 * scale) + 'px';
+                let naturalH = previewSheet.scrollHeight || previewSheet.offsetHeight || 600;
+                scaleFrame.style.height = Math.ceil(naturalH * scale) + 'px';
+            };
+            requestAnimationFrame(() => setTimeout(fitPreviewSheetToViewport, 40));
 
             let readyPdfBlob = null;
             let readyPdfFile = null;
@@ -1412,17 +1479,21 @@ window.Utils = {
                 isGenerating = true;
                 let shareBtn = modal.querySelector('#seraj-pdf-share-btn');
                 let previewSheet = modal.querySelector('#seraj-pdf-preview-sheet');
-                let scrollArea = modal.querySelector('#seraj-pdf-scroll-area');
-                if (!previewSheet || !scrollArea) return;
+                if (!previewSheet) return;
 
-                let origOverflow = scrollArea.style.overflow;
-                let origWidth = previewSheet.style.width;
-                let origMaxWidth = previewSheet.style.maxWidth;
+                let offscreenHost = document.createElement('div');
+                offscreenHost.style.cssText = 'position:fixed; inset:0; overflow:hidden; opacity:0; pointer-events:none; z-index:-1;';
+                let cloneSheet = previewSheet.cloneNode(true);
+                cloneSheet.removeAttribute('id');
+                cloneSheet.style.cssText = 'width:794px; max-width:none; background:#ffffff; color:#000000; padding:22px; transform:none;';
+                offscreenHost.appendChild(cloneSheet);
+                document.body.appendChild(offscreenHost);
 
-                // تثبيت العرض على 794px (قياس A4 القياسي) لمنع تشوه الجداول في الموبايل
-                scrollArea.style.overflow = 'visible';
-                previewSheet.style.width = '794px';
-                previewSheet.style.maxWidth = 'none';
+                const removeClone = () => {
+                    try {
+                        if (offscreenHost && offscreenHost.parentNode) offscreenHost.parentNode.removeChild(offscreenHost);
+                    } catch (e) {}
+                };
 
                 let opt = {
                     margin: [8, 8, 8, 8],
@@ -1433,6 +1504,7 @@ window.Utils = {
                         useCORS: true,
                         logging: false,
                         backgroundColor: '#ffffff',
+                        scrollX: 0,
                         scrollY: 0,
                         windowWidth: 794
                     },
@@ -1441,11 +1513,8 @@ window.Utils = {
                 };
 
                 setTimeout(() => {
-                    window.html2pdf().set(opt).from(previewSheet).toPdf().get('pdf').then((pdf) => {
-                        scrollArea.style.overflow = origOverflow;
-                        previewSheet.style.width = origWidth;
-                        previewSheet.style.maxWidth = origMaxWidth;
-
+                    window.html2pdf().set(opt).from(cloneSheet).toPdf().get('pdf').then((pdf) => {
+                        removeClone();
                         readyPdfBlob = pdf.output('blob');
                         try {
                             readyPdfFile = new File([readyPdfBlob], cleanFileName, { type: 'application/pdf', lastModified: Date.now() });
@@ -1459,9 +1528,7 @@ window.Utils = {
                         }
                     }).catch((err) => {
                         console.error('PDF Build Error:', err);
-                        scrollArea.style.overflow = origOverflow;
-                        previewSheet.style.width = origWidth;
-                        previewSheet.style.maxWidth = origMaxWidth;
+                        removeClone();
                         isGenerating = false;
                         if (shareBtn) {
                             shareBtn.textContent = '🖨️ طباعة / حفظ كـ PDF';
@@ -1469,7 +1536,7 @@ window.Utils = {
                             shareBtn.style.color = '#fff';
                         }
                     });
-                }, 350);
+                }, 220);
             };
 
             modal.querySelector('#seraj-pdf-share-btn').onclick = async () => {

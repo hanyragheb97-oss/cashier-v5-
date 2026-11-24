@@ -759,7 +759,8 @@
                 let isHorizontalSwipe = false;
                 let isLongPress = false;
                 let pressTimer = null;
-                let lastTapMs = 0;
+
+                tr.addEventListener('contextmenu', (e) => e.preventDefault());
 
                 tr.addEventListener('pointerdown', (e) => {
                     if (e.target && e.target.tagName === 'IMG') return;
@@ -777,6 +778,7 @@
                         if (isPointerActive && !isHorizontalSwipe && Math.abs(currentX - startX) < 12) {
                             isLongPress = true;
                             isPointerActive = false;
+                            if (window.SerajUI && window.SerajUI.armClickShield) window.SerajUI.armClickShield(450);
                             openEditModal(index);
                         }
                     }, 550);
@@ -792,7 +794,10 @@
                         return;
                     }
                     if (Math.abs(diffX) > 16) {
-                        isHorizontalSwipe = true;
+                        if (!isHorizontalSwipe) {
+                            isHorizontalSwipe = true;
+                            try { tr.setPointerCapture(e.pointerId); } catch (err) {}
+                        }
                         clearTimeout(pressTimer);
                         currentX = e.clientX;
                         tr.style.transform = `translateX(${diffX}px)`;
@@ -802,6 +807,12 @@
 
                 const finishPointer = (e, canceled = false) => {
                     clearTimeout(pressTimer);
+                    if (isLongPress) {
+                        if (e) e.preventDefault();
+                        if (window.SerajUI && window.SerajUI.armClickShield) window.SerajUI.armClickShield(420);
+                        isLongPress = false;
+                        return;
+                    }
                     if (!isPointerActive) return;
                     isPointerActive = false;
 
@@ -830,10 +841,12 @@
                             tr.style.transform = 'translateX(0)';
                             tr.style.opacity = '1';
                         }
-                    } else if (!isLongPress && Math.abs(diffX) < 12 && diffY < 12) {
+                    } else if (Math.abs(diffX) < 12 && diffY < 12) {
                         const now = Date.now();
-                        if (now - lastTapMs < 350) return;
-                        lastTapMs = now;
+                        if (now - (window._purchasesLastRowTapTs || 0) < 350) return;
+                        window._purchasesLastRowTapTs = now;
+                        if (e) { e.preventDefault(); e.stopPropagation(); }
+                        if (window.SerajUI && window.SerajUI.armClickShield) window.SerajUI.armClickShield(350);
                         if (!invoice[index]) return;
                         invoice[index].qty = round4((parseFloat(invoice[index].qty) || 0) + 1);
                         invoice[index].total = round2((parseFloat(invoice[index].purchasePrice) || 0) * invoice[index].qty);

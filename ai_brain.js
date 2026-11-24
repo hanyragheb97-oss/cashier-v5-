@@ -34,28 +34,28 @@ function buildAIBrainUI() {
     // رسم الشاشة والزرار
     const style = document.createElement('style');
     style.innerHTML = `
-        #ai-fab { position: fixed; bottom: 80px; left: 20px; width: 60px; height: 60px; background: #1e3a8a; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 15px rgba(37,99,235,0.5); z-index: 9999; border: 2px solid #3b82f6; transition: transform 0.2s; }
+        #ai-fab { position: fixed; bottom: 82px; right: 18px; left: auto; width: 54px; height: 54px; background: var(--btn-nav-bg, #1e3a8a); color: var(--btn-nav-text, #ffffff); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 0 18px var(--neon-glow, rgba(37,99,235,0.5)); z-index: 910; border: 2px solid var(--neon-border, #3b82f6); transition: transform 0.2s; }
         #ai-fab:active { transform: scale(0.92); }
-        #ai-chat-window { position: fixed; bottom: 150px; left: 20px; width: 380px; max-width: 92vw; height: 560px; background: white; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); display: none; flex-direction: column; z-index: 9999; overflow: hidden; font-family: Arial, sans-serif; direction: rtl; }
-        #ai-header { background: #1e3a8a; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
-        #ai-toggle-container { display: flex; align-items: center; gap: 8px; font-size: 14px; background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 20px; }
+        #ai-chat-window { position: fixed; bottom: 144px; right: 14px; left: auto; width: 380px; max-width: calc(100vw - 28px); height: 520px; max-height: calc(100dvh - 165px); background: var(--bg-dark-2, #0b0d1e); color: var(--text-main, #ffffff); border: 2px solid var(--neon-border, #3b82f6); border-radius: 15px; box-shadow: 0 10px 28px var(--shadow-dark, rgba(0,0,0,0.45)); display: none; flex-direction: column; z-index: 9999; overflow: hidden; font-family: inherit; direction: rtl; }
+        #ai-header { background: var(--btn-nav-bg, #1e3a8a); color: var(--btn-nav-text, #ffffff); padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        #ai-toggle-container { display: flex; align-items: center; gap: 8px; font-size: 14px; background: rgba(255,255,255,0.18); padding: 5px 10px; border-radius: 20px; }
         .switch { position: relative; display: inline-block; width: 40px; height: 20px; margin: 0; }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 20px; }
         .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: #f59e0b; }
         input:checked + .slider:before { transform: translateX(20px); }
-        #ai-messages { flex: 1; padding: 15px; overflow-y: auto; background: #f3f4f6; display: flex; flex-direction: column; gap: 10px; user-select: text; -webkit-user-select: text; }
-        .ai-msg { max-width: 88%; padding: 12px 15px; border-radius: 15px; font-size: 15px; line-height: 1.6; user-select: text; -webkit-user-select: text; }
-        .ai-msg.user { background: #2563eb; color: white; align-self: flex-start; border-bottom-right-radius: 0; }
-        .ai-msg.bot { background: white; color: black; align-self: flex-end; border: 1px solid #e5e7eb; border-bottom-left-radius: 0; }
+        #ai-messages { flex: 1; min-height: 0; padding: 14px; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; background: var(--bg-dark-1, #070913); display: flex; flex-direction: column; gap: 10px; user-select: text; -webkit-user-select: text; }
+        .ai-msg { max-width: 88%; padding: 11px 14px; border-radius: 14px; font-size: 15px; line-height: 1.6; user-select: text; -webkit-user-select: text; }
+        .ai-msg.user { background: var(--btn-nav-bg, #2563eb); color: var(--btn-nav-text, #ffffff); align-self: flex-start; border-bottom-right-radius: 0; }
+        .ai-msg.bot { background: var(--card-bg, #0f172a); color: var(--text-main, #ffffff); align-self: flex-end; border: 1px solid var(--neon-border-soft, rgba(59,130,246,0.28)); border-bottom-left-radius: 0; }
         .ai-msg img { max-width: 100%; border-radius: 10px; margin-bottom: 5px; }
-        #ai-input-area { display: flex; flex-direction: column; background: white; border-top: 1px solid #e5e7eb; padding: 8px; }
-        #ai-image-preview-container { display: none; padding: 5px 10px; background: #eef2ff; border-bottom: 1px solid #ddd; font-size: 12px; color: #2563eb; align-items: center; justify-content: space-between; }
-        .ai-controls { display: flex; gap: 8px; align-items: flex-end; }
-        #ai-input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 12px; outline: none; font-size: 15px; resize: none; height: 60px; font-family: inherit; }
-        .ai-btn { background: #2563eb; color: white; border: none; padding: 8px; border-radius: 50%; cursor: pointer; width: 42px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
-        .ai-btn.mic-active { background: #dc2626; animation: pulse 1.5s infinite; }
+        #ai-input-area { display: flex; flex-direction: column; background: var(--bg-dark-2, #0b0d1e); border-top: 1px solid var(--neon-border-soft, rgba(59,130,246,0.28)); padding: 8px; flex-shrink: 0; }
+        #ai-image-preview-container { display: none; padding: 5px 10px; background: var(--card-bg-alt, #131c31); border-bottom: 1px solid var(--neon-border-soft, rgba(59,130,246,0.28)); font-size: 12px; color: var(--neon-border, #3b82f6); align-items: center; justify-content: space-between; }
+        .ai-controls { display: flex; gap: 6px; align-items: flex-end; }
+        #ai-input { flex: 1; padding: 10px; border: 1.5px solid var(--neon-border, #3b82f6); border-radius: 12px; background: var(--input-bg, #0f172a); color: var(--text-main, #ffffff); outline: none; font-size: 15px; resize: none; height: 54px; font-family: inherit; }
+        .ai-btn { background: var(--btn-nav-bg, #2563eb); color: var(--btn-nav-text, #ffffff); border: none; padding: 8px; border-radius: 50%; cursor: pointer; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+        .ai-btn.mic-active { background: var(--accent-red, #dc2626); animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
         #ai-camera-input { display: none; }
     `;
@@ -72,7 +72,7 @@ function buildAIBrainUI() {
     `;
 
     const uiHTML = `
-        <div id="ai-fab" title="المحاسب الذكي">${robotSvg}</div>
+        <div id="ai-fab" class="seraj-ai-floating-btn" title="المحاسب الذكي">${robotSvg}</div>
         <div id="ai-chat-window">
             <div id="ai-header">
                 <span style="font-weight:bold; font-size: 16px;">المساعد الذكي</span>

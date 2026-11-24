@@ -225,6 +225,7 @@
         }
 
         function switchView(viewId) {
+            if (window.SerajUI && window.SerajUI.armClickShield) window.SerajUI.armClickShield(420);
             document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active-view'));
             document.getElementById(viewId).classList.add('active-view');
             if (viewId === 'invoices-list-view') {
@@ -425,6 +426,9 @@
                 tr.addEventListener('pointerup', (e) => {
                     if (moved) return;
                     if (e.button !== undefined && e.button !== 0) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (window.SerajUI && window.SerajUI.armClickShield) window.SerajUI.armClickShield(420);
                     openInvoiceDetails(invId);
                 });
             });

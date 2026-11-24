@@ -264,7 +264,8 @@ html, body {
     user-select: none;
     overflow-x: hidden;
     min-height: 100vh;
-    overscroll-behavior-y: none !important;
+    min-height: 100dvh;
+    overscroll-behavior-y: auto;
     direction: rtl;
 }
 
@@ -278,15 +279,17 @@ input, textarea, select {
     display: none !important;
 }
 
-/* إظهار القسم النشط مع تفعيل التمرير العمودي السلس لفك التجميد في كل الصفحات */
+/* إظهار القسم النشط كحاوية التمرير العمودي الوحيدة لمنع التمرير المتداخل */
 .active-view, .seraj-active-view {
     display: flex !important;
     flex-direction: column;
-    height: 100vh !important;
+    height: 100vh;
+    height: 100dvh !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch !important;
-    padding-bottom: 90px;
+    overscroll-behavior-y: contain;
+    padding-bottom: 95px;
     box-sizing: border-box;
     animation: fadeIn 0.2s ease;
 }
@@ -297,9 +300,11 @@ input, textarea, select {
 #product-details-view.active-view {
     display: flex !important;
     flex-direction: column;
-    height: 100vh !important;
+    height: 100vh;
+    height: 100dvh !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-y: contain;
     padding-bottom: 145px !important;
     box-sizing: border-box;
 }
@@ -308,7 +313,8 @@ input, textarea, select {
     max-width: 900px;
     margin: 0 auto !important;
     width: 100%;
-    flex: 1;
+    flex: 1 0 auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     padding: 0 12px;
@@ -533,9 +539,11 @@ body.page-records .seraj-header,
     background-color: var(--bg-dark-2) !important;
     border: 2px solid var(--neon-border);
     border-radius: 0 0 16px 16px;
-    max-height: 65vh !important;
+    max-height: 50dvh !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
     scroll-behavior: smooth;
     z-index: 9999 !important;
     display: none;
@@ -862,9 +870,9 @@ body.page-records .seraj-header,
 /* 5. القالب الموحد للجداول (الفواتير، العرض والتعديل، المخزن، العملاء، الموردين) */
 /* ========================================================================== */
 .table-wrapper, .seraj-table-wrapper, .invoice-table-container {
-    max-height: calc(100vh - 230px);
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    max-height: none;
+    overflow-y: visible;
+    overflow-x: clip;
     border-radius: 16px;
     border: 2px solid var(--neon-border);
     box-shadow: 0 0 20px var(--neon-glow);
@@ -872,12 +880,12 @@ body.page-records .seraj-header,
     margin-bottom: 15px;
 }
 
-/* ضمان تمرير جدول الفاتورة في شاشات العرض والتعديل بحرية */
+/* تمدد طبيعي لجدول الفاتورة داخل تمرير الشاشة الموحد دون تجميد */
 #full-edit-view .table-wrapper,
 #invoice-details-view .table-wrapper {
-    overflow-y: auto !important;
-    max-height: calc(100vh - 290px) !important;
-    -webkit-overflow-scrolling: touch !important;
+    overflow-y: visible !important;
+    overflow-x: clip !important;
+    max-height: none !important;
 }
 
 table, .seraj-table {
@@ -905,7 +913,7 @@ table td, .seraj-table td {
     padding: 12px 6px;
     border-bottom: 1px solid var(--neon-border-soft);
     cursor: pointer;
-    touch-action: pan-y;
+    touch-action: manipulation;
     color: var(--text-main);
     font-weight: bold;
     font-size: 15px;

@@ -358,7 +358,7 @@
         }
 
         function getCustomersScrollContainer() {
-            return document.querySelector('#customers-list-view .table-wrapper') || document.getElementById('customers-list-view');
+            return document.getElementById('customers-list-view');
         }
 
         function closeAllMenus(e) {
@@ -426,6 +426,7 @@
         }
 
         function switchView(viewId) {
+            if (window.SerajUI && window.SerajUI.armClickShield) window.SerajUI.armClickShield(420);
             document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active-view'));
             document.getElementById(viewId).classList.add('active-view');
 
@@ -590,6 +591,8 @@
                 let longPressed = false;
                 let timer = null;
 
+                tr.addEventListener('contextmenu', (e) => e.preventDefault());
+
                 tr.addEventListener('pointerdown', (e) => {
                     if (e.button !== undefined && e.button !== 0) return;
                     startY = e.clientY;
@@ -599,6 +602,7 @@
                     timer = setTimeout(() => {
                         if (!moved) {
                             longPressed = true;
+                            if (window.SerajUI && window.SerajUI.armClickShield) window.SerajUI.armClickShield(450);
                             openEditCustomerModal(cid);
                         }
                     }, 550);
@@ -613,8 +617,16 @@
 
                 tr.addEventListener('pointerup', (e) => {
                     clearTimeout(timer);
-                    if (moved || longPressed) return;
+                    if (longPressed) {
+                        e.preventDefault();
+                        if (window.SerajUI && window.SerajUI.armClickShield) window.SerajUI.armClickShield(420);
+                        return;
+                    }
+                    if (moved) return;
                     if (e.button !== undefined && e.button !== 0) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (window.SerajUI && window.SerajUI.armClickShield) window.SerajUI.armClickShield(420);
                     openCustomerAccount(cid);
                 });
 

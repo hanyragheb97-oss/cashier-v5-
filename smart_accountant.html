@@ -19,11 +19,14 @@
            ربط الهيكل الحركي المخصص بمتغيرات الألوان المركزية 
            لضمان التطابق التام مع هوية سراج كاشير والثيمات الفاتحة والداكنة
         ======================================================== */
-        body { 
-            background: var(--bg-main, var(--bg-dark-1)); 
-            color: var(--text-main, #ffffff); 
-            height: 100vh; overflow: hidden; display: flex;
-            flex-direction: column; user-select: none;
+        body {
+            background: var(--bg-main, var(--bg-dark-1));
+            color: var(--text-main, #ffffff);
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
         
         /* القوائم والتبويبات */
@@ -37,9 +40,9 @@
         .sub-tab-btn.tab-active { color: var(--color-val-green); text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 2px;}
 
         /* حاوية السحب */
-        .swipe-container { flex: 1; display: flex; width: 100%; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none; align-items: stretch; }
+        .swipe-container { flex: 1; min-height: 0; display: flex; width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none; align-items: stretch; }
         .swipe-container::-webkit-scrollbar { display: none; }
-        .tab-section { flex: 0 0 100vw; width: 100vw; height: 100%; overflow-y: auto; padding: 15px 15px 85px 15px; scroll-snap-align: center; scroll-snap-stop: always; }
+        .tab-section { flex: 0 0 100vw; width: 100vw; height: 100%; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; padding: 15px 15px 95px 15px; scroll-snap-align: center; scroll-snap-stop: always; }
 
         /* الكروت والمربعات باستخدام ألوان النظام */
         .stat-card-overview, .list-card { background: var(--bg-dark-1); margin-bottom: 10px; padding: 15px; border-radius: 12px; border: 1px solid var(--neon-border); display: flex; flex-direction: column; box-shadow: 0 0 10px var(--shadow-dark); }
@@ -57,7 +60,7 @@
         .custom-menu div { padding: 12px; border-bottom: 1px solid var(--neon-border); text-align: center; font-size: 14px; cursor: pointer; color: var(--text-main);}
         
         /* الجداول */
-        .table-container { height: calc(100vh - 290px); overflow-y: auto; border-radius: 12px; border: 1px solid var(--neon-border); box-shadow: 0 0 15px var(--shadow-dark); background: var(--bg-dark-1); margin-top: 10px; }
+        .table-container { height: auto; overflow-y: visible; overflow-x: clip; border-radius: 12px; border: 1px solid var(--neon-border); box-shadow: 0 0 15px var(--shadow-dark); background: var(--card-bg, var(--bg-dark-1)); margin-top: 10px; }
         .orders-table { width: 100%; border-collapse: collapse; }
         .orders-table th, .orders-table td { padding: 10px 6px; border-bottom: 1px solid var(--neon-border); text-align: center; font-size: 13px; font-weight: bold; color: var(--text-main); }
         .orders-table th { position: sticky; top: 0; background: var(--bg-main); color: var(--text-main); border-bottom: 2px solid var(--neon-border); z-index: 10; font-size: 14px; }
@@ -78,8 +81,8 @@
         .note-card { display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; cursor: pointer; padding: 14px 18px !important; min-height: 90px; border: 1px solid var(--neon-border, #a855f7) !important; box-shadow: 0 0 10px var(--shadow-dark, rgba(0,0,0,0.3)) !important; border-radius: 12px; margin-bottom: 8px; background: var(--bg-dark-1, #19172c); }
         
         /* === هنا التعديل الأساسي لمنع التداخل والشفافية بوضع لون صلب احتياطي وتكبير الـ z-index === */
-        .note-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: var(--bg-main, #070913); z-index: 99999; display: flex; flex-direction: column; padding-top: 15px; }
-        .note-modal-footer { position: absolute; bottom: 0; left: 0; right: 0; background: var(--bg-dark-1, #120f29); border-top: 2px solid var(--neon-border, #a855f7); display: flex; padding: 10px 15px; gap: 10px; z-index: 100000; box-shadow: 0 -4px 15px rgba(0,0,0,0.8); align-items: center; }
+        .note-modal { position: fixed; inset: 0; width: 100%; height: 100vh; height: 100dvh; background: var(--bg-main, #070913); z-index: 99999; display: flex; flex-direction: column; padding-top: 15px; }
+        .note-modal-footer { position: absolute; bottom: 0; left: 0; right: 0; background: var(--bg-dark-2, #120f29); border-top: 2px solid var(--neon-border, #a855f7); display: flex; padding: 10px 15px max(10px, env(safe-area-inset-bottom)) 15px; gap: 10px; z-index: 100000; box-shadow: 0 -4px 15px var(--shadow-dark); align-items: center; }
         
         .note-inputs-container { padding: 10px 20px; text-align: center; }
         .note-title-input { width: 100%; background: transparent; border: none; border-bottom: 2px solid var(--neon-border, #a855f7); color: var(--color-val-green, #10b981); font-size: 22px; font-weight: bold; text-align: center; padding: 5px; margin-bottom: 10px; outline: none; }
@@ -188,14 +191,14 @@
         <div class="tab-section" id="col-sales-view" data-main="collected">
             <div class="list-card"><div class="amount" id="col-returns">0.00 <span>ج</span></div><div class="title">إجمالي المرتجعات</div></div>
             <div class="list-card"><div class="amount" id="col-discounts">0.00 <span>ج</span></div><div class="title">إجمالي الخصومات</div></div>
-            <div class="list-card"><div class="amount" id="col-netsales" style="color:white;">0.00 <span>ج</span></div><div class="title">صافي المبيعات</div></div>
+            <div class="list-card"><div class="amount" id="col-netsales" style="color:var(--text-main);">0.00 <span>ج</span></div><div class="title">صافي المبيعات</div></div>
             <div class="list-card"><div class="amount" id="col-paid">0.00 <span>ج</span></div><div class="title">المسدد نقداً بالفواتير</div></div>
             <div class="list-card"><div class="amount" id="col-deferred">0.00 <span>ج</span></div><div class="title">المتبقي من الفواتير الآجلة</div></div>
             <div class="list-card"><div class="amount" id="col-vouchers">0.00 <span>ج</span></div><div class="title">صافي سندات العملاء (تحصيل - صرف)</div></div>
             <div class="list-card"><div class="amount" id="col-profits">0.00 <span>ج</span></div><div class="title">إجمالي الأرباح</div></div>
-            <div class="list-card"><div class="amount" id="col-expenses" style="color:#ff1a40;">0.00 <span>ج</span></div><div class="title">إجمالي المصروفات</div></div>
-            <div class="list-card"><div class="amount" id="col-netprofits" style="color:#00ff66;">0.00 <span>ج</span></div><div class="title">الأرباح بعد المصروفات</div></div>
-            <div class="list-card"><div class="amount" id="col-margin" style="color:#f59e0b;">0 <span>%</span></div><div class="title">نسبة الأرباح</div></div>
+            <div class="list-card"><div class="amount" id="col-expenses" style="color:var(--color-val-red);">0.00 <span>ج</span></div><div class="title">إجمالي المصروفات</div></div>
+            <div class="list-card"><div class="amount" id="col-netprofits" style="color:var(--color-val-green);">0.00 <span>ج</span></div><div class="title">الأرباح بعد المصروفات</div></div>
+            <div class="list-card"><div class="amount" id="col-margin" style="color:var(--warning-color);">0 <span>%</span></div><div class="title">نسبة الأرباح</div></div>
         </div>
 
         <!-- ================= 5.5 المفكره الذكيه الذكية ================= -->
@@ -209,9 +212,9 @@
         <!-- ================= 5. المشتريات المجمعة ================= -->
         <div class="tab-section" id="col-purchases-view" data-main="collected">
             <div class="list-card"><div class="amount" id="col-purchases-total">0.00 <span>ج</span></div><div class="title">إجمالي المشتريات</div></div>
-            <div class="list-card"><div class="amount" id="col-purchases-paid" style="color:#00ff66;">0.00 <span>ج</span></div><div class="title">المسدد نقداً بفواتير الشراء</div></div>
-            <div class="list-card"><div class="amount" id="col-purchases-deferred" style="color:#ff1a40;">0.00 <span>ج</span></div><div class="title">المتبقي من فواتير الشراء الآجلة</div></div>
-            <div class="list-card"><div class="amount" id="col-purchases-vouchers" style="color:#38bdf8;">0.00 <span>ج</span></div><div class="title">صافي سندات الموردين (سداد - مديونية)</div></div>
+            <div class="list-card"><div class="amount" id="col-purchases-paid" style="color:var(--color-val-green);">0.00 <span>ج</span></div><div class="title">المسدد نقداً بفواتير الشراء</div></div>
+            <div class="list-card"><div class="amount" id="col-purchases-deferred" style="color:var(--color-val-red);">0.00 <span>ج</span></div><div class="title">المتبقي من فواتير الشراء الآجلة</div></div>
+            <div class="list-card"><div class="amount" id="col-purchases-vouchers" style="color:var(--color-customer);">0.00 <span>ج</span></div><div class="title">صافي سندات الموردين (سداد - مديونية)</div></div>
         </div>
 
         <!-- ================= 4. طلبات الموردين ================= -->
@@ -264,11 +267,11 @@
 
         <!-- ================= 2. الأرباح ================= -->
         <div class="tab-section" id="ov-profits" data-main="overview">
-            <div class="stat-card-overview"><div class="title">اليوم</div><div class="amount" id="profit-today" style="color:#00ff66;">0.00 <span style="font-size:14px;">ج</span></div></div>
-            <div class="stat-card-overview"><div class="title">أمس</div><div class="amount" id="profit-yesterday" style="color:#00ff66;">0.00 <span style="font-size:14px;">ج</span></div></div>
-            <div class="stat-card-overview"><div class="title">هذا الشهر</div><div class="amount" id="profit-month" style="color:#00ff66;">0.00 <span style="font-size:14px;">ج</span></div></div>
-            <div class="stat-card-overview"><div class="title">الشهر الماضي</div><div class="amount" id="profit-lastmonth" style="color:#00ff66;">0.00 <span style="font-size:14px;">ج</span></div></div>
-            <div class="stat-card-overview"><div class="title">مدى العمل</div><div class="amount" id="profit-total" style="color:#00ff66;">0.00 <span style="font-size:14px;">ج</span></div></div>
+            <div class="stat-card-overview"><div class="title">اليوم</div><div class="amount" id="profit-today" style="color:var(--color-val-green);">0.00 <span style="font-size:14px;">ج</span></div></div>
+            <div class="stat-card-overview"><div class="title">أمس</div><div class="amount" id="profit-yesterday" style="color:var(--color-val-green);">0.00 <span style="font-size:14px;">ج</span></div></div>
+            <div class="stat-card-overview"><div class="title">هذا الشهر</div><div class="amount" id="profit-month" style="color:var(--color-val-green);">0.00 <span style="font-size:14px;">ج</span></div></div>
+            <div class="stat-card-overview"><div class="title">الشهر الماضي</div><div class="amount" id="profit-lastmonth" style="color:var(--color-val-green);">0.00 <span style="font-size:14px;">ج</span></div></div>
+            <div class="stat-card-overview"><div class="title">مدى العمل</div><div class="amount" id="profit-total" style="color:var(--color-val-green);">0.00 <span style="font-size:14px;">ج</span></div></div>
         </div>
 
         <!-- ================= 1. المبيعات (نقطة البداية - أقصى اليمين) ================= -->
@@ -349,7 +352,7 @@
             <span style="font-size: 18px; margin-left: 5px;">📅</span>
             <!-- قائمة منسدلة داخلية متناسقة للتواريخ -->
             <div class="custom-dropdown" style="flex:1; border:none; background:transparent; box-shadow:none; padding:0;" onclick="toggleCustomMenu(event, 'menu-date-filter')">
-                <span id="label-date-filter" style="color:#00ff66; width:100%; text-align:center;">اخر 30 يوم</span>
+                <span id="label-date-filter" style="color:var(--color-val-green); width:100%; text-align:center;">اخر 30 يوم</span>
                 <input type="hidden" id="date-filter" value="30days">
                 <div class="custom-menu" id="menu-date-filter" style="bottom: 100%; top: auto; margin-bottom: 10px;">
                     <div onclick="selectCustomOption(event, 'date-filter', 'today', 'اليوم', 'collected')">اليوم</div>
@@ -1060,9 +1063,9 @@ function getSafeTimeMs(val) {
             if (smartNotesDB.length === 0) {
                 container.innerHTML = `
                     <div class="stat-card-overview note-card" onclick="openNoteModal(null)">
-                        <div style="flex: 1; text-align: right; font-size: 13px; color: #9ca3af;">مفكرة جديدة</div>
-                        <div style="flex: 1.2; text-align: center; color: #00ff66; font-size: 18px; font-weight: bold; text-shadow: 0 0 8px rgba(0, 255, 102, 0.4);">ملاحظات عامة</div>
-                        <div style="flex: 1; text-align: left; font-size: 13px; color: #f59e0b; font-weight: bold;">اضغط للبدء ➕</div>
+                        <div style="flex: 1; text-align: right; font-size: 13px; color: var(--text-muted);">مفكرة جديدة</div>
+                        <div style="flex: 1.2; text-align: center; color: var(--color-val-green); font-size: 18px; font-weight: bold;">ملاحظات عامة</div>
+                        <div style="flex: 1; text-align: left; font-size: 13px; color: var(--warning-color); font-weight: bold;">اضغط للبدء ➕</div>
                     </div>
                 `;
                 return;
@@ -1092,21 +1095,21 @@ function getSafeTimeMs(val) {
 
                 let leftItemsHtml = '';
                 displayItems.forEach(item => {
-                    let itemColor = '#f59e0b';
-                    if (item.stateColor === 'state-red') itemColor = '#ef4444';
-                    else if (item.stateColor === 'state-green') itemColor = '#00ff66';
+                    let itemColor = 'var(--warning-color)';
+                    if (item.stateColor === 'state-red') itemColor = 'var(--color-val-red)';
+                    else if (item.stateColor === 'state-green') itemColor = 'var(--color-val-green)';
 
                     let cleanName = String(item.name || '').replace(/<[^>]*>?/gm, '').replace('(مؤرشف)', '').trim();
                     leftItemsHtml += `<div style="color: ${itemColor}; font-size: 12px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; text-align: left; line-height: 1.3;">• ${safeHtmlAcc(cleanName)}</div>`;
                 });
 
                 if (remainingCount > 0) {
-                    leftItemsHtml += `<div style="color: #9ca3af; font-size: 11px; font-weight: bold; text-align: left; margin-top: 2px;">+${remainingCount} أصناف أخرى</div>`;
+                    leftItemsHtml += `<div style="color: var(--text-muted); font-size: 11px; font-weight: bold; text-align: left; margin-top: 2px;">+${remainingCount} أصناف أخرى</div>`;
                 }
 
                 card.innerHTML = `
-                    <div style="flex: 1; text-align: right; font-size: 13px; color: #d1d5db; overflow: hidden; text-overflow: ellipsis; white-space: normal; line-height: 1.4; padding-left: 8px;">${safeHtmlAcc(rightComment)}</div>
-                    <div style="flex: 1.2; text-align: center; color: #00ff66; font-size: 21px; font-weight: bold; text-shadow: 0 0 10px rgba(0, 255, 102, 0.5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 5px;">${safeHtmlAcc(centerTitle)}</div>
+                    <div style="flex: 1; text-align: right; font-size: 13px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: normal; line-height: 1.4; padding-left: 8px;">${safeHtmlAcc(rightComment)}</div>
+                    <div style="flex: 1.2; text-align: center; color: var(--color-val-green); font-size: 21px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 5px;">${safeHtmlAcc(centerTitle)}</div>
                     <div style="flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; overflow: hidden; padding-right: 8px;">
                         ${leftItemsHtml}
                     </div>
@@ -1236,8 +1239,8 @@ function getSafeTimeMs(val) {
             
             // 1. خيار الإضافة الحرة في قمة القائمة
             let addFreeDiv = document.createElement('div');
-            addFreeDiv.style.cssText = `padding: 12px 15px; border-bottom: 1px solid #374151; color: white; font-weight: bold; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(59, 130, 246, 0.2); text-decoration: none !important;`;
-            addFreeDiv.innerHTML = `<span style="color:#4ade80;">➕ إضافة "${safeHtmlAcc(query)}"</span> <span style="color:#9ca3af; font-size:13px;">(صنف حر)</span>`;
+            addFreeDiv.style.cssText = `padding: 12px 15px; border-bottom: 1px solid var(--neon-border-soft); color: var(--text-main); font-weight: bold; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: var(--card-bg-alt); text-decoration: none !important;`;
+            addFreeDiv.innerHTML = `<span style="color:var(--color-val-green);">➕ إضافة "${safeHtmlAcc(query)}"</span> <span style="color:var(--text-muted); font-size:13px;">(صنف حر)</span>`;
             addFreeDiv.onclick = () => {
                 selectItemForNote(query, 'مؤقت', true, false);
                 resultsDiv.style.display = 'none';
@@ -1250,14 +1253,14 @@ function getSafeTimeMs(val) {
                 let currentStock = (Array.isArray(p.lots) && p.lots.length > 0) ? p.lots.reduce((sum, l) => sum + (parseFloat(l.stock) || 0), 0) : (parseFloat(p.stock) || parseFloat(p.qty) || 0);
                 
                 let isArchived = Boolean(p.isArchived || p.isDeleted || p.deleted || p.archived);
-                let archivedTag = isArchived ? `<span style="color:#ff1a40; font-size:11px; margin-right:5px; font-weight:bold;">(مؤرشف)</span>` : '';
-                let itemStyle = isArchived ? `background: rgba(220, 38, 38, 0.15); border-right: 3px solid #ff1a40;` : '';
+                let archivedTag = isArchived ? `<span style="color:var(--color-val-red); font-size:11px; margin-right:5px; font-weight:bold;">(مؤرشف)</span>` : '';
+                let itemStyle = isArchived ? `background: rgba(220, 38, 38, 0.15); border-right: 3px solid var(--color-val-red);` : '';
 
                 let cleanName = String(p.name || '').replace(/<[^>]*>?/gm, '');
 
                 let div = document.createElement('div');
-                div.style.cssText = `padding: 12px 15px; border-bottom: 1px solid #374151; color: white; font-weight: bold; cursor: pointer; display: flex; justify-content: space-between; align-items: center; text-decoration: none !important; ${itemStyle}`;
-                div.innerHTML = `<div><span>${safeHtmlAcc(cleanName)}</span> ${archivedTag}</div> <span style="color:#f59e0b; font-size:13px;">رصيد: ${currentStock}</span>`;
+                div.style.cssText = `padding: 12px 15px; border-bottom: 1px solid var(--neon-border-soft); color: var(--text-main); font-weight: bold; cursor: pointer; display: flex; justify-content: space-between; align-items: center; text-decoration: none !important; ${itemStyle}`;
+                div.innerHTML = `<div><span>${safeHtmlAcc(cleanName)}</span> ${archivedTag}</div> <span style="color:var(--warning-color); font-size:13px;">رصيد: ${currentStock}</span>`;
                 div.onclick = () => {
                     selectItemForNote(cleanName, currentStock, false, isArchived, p.id);
                     resultsDiv.style.display = 'none';

@@ -60,16 +60,24 @@ const PrintManager = {
      */
     _printHtmlViaSafeIframe: function(fullHtmlDocument) {
         return new Promise((resolve) => {
+            const existingFrame = document.getElementById('seraj-active-print-frame');
+            if (existingFrame && existingFrame.parentNode) {
+                try { existingFrame.parentNode.removeChild(existingFrame); } catch (e) {}
+            }
+
             const printFrame = document.createElement('iframe');
+            printFrame.id = 'seraj-active-print-frame';
             printFrame.setAttribute('aria-hidden', 'true');
             printFrame.style.cssText = 'position:fixed; right:0; bottom:0; width:0; height:0; border:0; visibility:hidden; pointer-events:none;';
 
             let hasPrinted = false;
             let cleanedUp = false;
+            let cleanupTimer = null;
 
             const cleanup = () => {
                 if (cleanedUp) return;
                 cleanedUp = true;
+                if (cleanupTimer) clearTimeout(cleanupTimer);
                 try {
                     if (printFrame.parentNode) printFrame.parentNode.removeChild(printFrame);
                 } catch (e) {}
@@ -85,7 +93,7 @@ const PrintManager = {
                     win.focus();
                     win.onafterprint = cleanup;
                     win.print();
-                    setTimeout(cleanup, 12000);
+                    cleanupTimer = setTimeout(cleanup, 60000);
                 } catch (err) {
                     console.error('Iframe Print Error:', err);
                     cleanup();
@@ -153,12 +161,15 @@ const PrintManager = {
         const isAndroid = /Android/i.test(navigator.userAgent || '');
 
         if (hasLib) {
-            let host = null;
+            let hostWrap = null;
             try {
-                host = document.createElement('div');
-                host.style.cssText = 'position:fixed; left:-9999px; top:0; width:576px; background:#ffffff; color:#000000; direction:rtl; padding:14px 16px; box-sizing:border-box; font-family:Tahoma, Arial, sans-serif; z-index:-1;';
+                hostWrap = document.createElement('div');
+                hostWrap.style.cssText = 'position:fixed; inset:0; overflow:hidden; opacity:0; pointer-events:none; z-index:-1;';
+                const host = document.createElement('div');
+                host.style.cssText = 'position:relative; width:576px; background:#ffffff; color:#000000; direction:rtl; padding:14px 16px; box-sizing:border-box; font-family:Tahoma, Arial, sans-serif;';
                 host.innerHTML = receiptBodyHtml;
-                document.body.appendChild(host);
+                hostWrap.appendChild(host);
+                document.body.appendChild(hostWrap);
 
                 let canvas = null;
                 if (typeof window.html2canvas === 'function') {
@@ -167,17 +178,21 @@ const PrintManager = {
                         backgroundColor: '#ffffff',
                         useCORS: true,
                         logging: false,
+                        scrollX: 0,
+                        scrollY: 0,
+                        x: 0,
+                        y: 0,
                         width: 576,
                         windowWidth: 576
                     });
                 } else if (typeof window.html2pdf === 'function') {
                     canvas = await window.html2pdf().set({
-                        html2canvas: { scale: 1, backgroundColor: '#ffffff', useCORS: true, logging: false, width: 576, windowWidth: 576 }
+                        html2canvas: { scale: 1, backgroundColor: '#ffffff', useCORS: true, logging: false, scrollX: 0, scrollY: 0, x: 0, y: 0, width: 576, windowWidth: 576 }
                     }).from(host).toCanvas().get('canvas');
                 }
 
-                if (host && host.parentNode) host.parentNode.removeChild(host);
-                host = null;
+                if (hostWrap && hostWrap.parentNode) hostWrap.parentNode.removeChild(hostWrap);
+                hostWrap = null;
 
                 if (canvas) {
                     const pngDataUrl = canvas.toDataURL('image/png');
@@ -190,7 +205,7 @@ const PrintManager = {
                 }
             } catch (err) {
                 console.error('RawBT Image Render Error:', err);
-                if (host && host.parentNode) host.parentNode.removeChild(host);
+                if (hostWrap && hostWrap.parentNode) hostWrap.parentNode.removeChild(hostWrap);
             }
         }
 

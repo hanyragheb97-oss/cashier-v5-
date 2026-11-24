@@ -637,6 +637,9 @@
             if (viewId !== 'inventory-list-view' && listView) {
                 savedScrollPosition = listView.scrollTop || 0;
             }
+            if (window.SerajUI && window.SerajUI.armClickShield) {
+                window.SerajUI.armClickShield(420);
+            }
 
             document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active-view'));
             const targetView = document.getElementById(viewId);
@@ -800,6 +803,9 @@
                     if (moved) return;
                     if (e.target && e.target.closest('.product-thumb-img')) return;
                     if (e.button !== undefined && e.button !== 0) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (window.SerajUI && window.SerajUI.armClickShield) window.SerajUI.armClickShield(420);
                     openProductDetails(pid);
                 });
             });

@@ -22,6 +22,59 @@
             --border-color: rgba(255, 255, 255, 0.08);
         }
 
+        :root.seraj-light-theme {
+            --bg-dark: #f1f5f9;
+            --bg-panel: #ffffff;
+            --bg-card: #f8fafc;
+            --neon-cyan: #0284c7;
+            --neon-blue: #2563eb;
+            --neon-green: #15803d;
+            --neon-amber: #b45309;
+            --neon-red: #dc2626;
+            --neon-purple: #7c3aed;
+            --text-main: #0f172a;
+            --text-muted: #475569;
+            --border-color: rgba(15, 23, 42, 0.14);
+        }
+
+        :root.seraj-light-theme .ai-header {
+            background: linear-gradient(135deg, #ffffff 0%, #e2e8f0 100%);
+            border-bottom-color: rgba(37, 99, 235, 0.28);
+            box-shadow: 0 2px 12px rgba(15, 23, 42, 0.12);
+        }
+
+        :root.seraj-light-theme .brand-info h1,
+        :root.seraj-light-theme .stat-val,
+        :root.seraj-light-theme .chat-input,
+        :root.seraj-light-theme .form-input {
+            color: #0f172a;
+        }
+
+        :root.seraj-light-theme .chip,
+        :root.seraj-light-theme .hdr-btn {
+            background: #f8fafc;
+            color: #0f172a;
+            border-color: rgba(37, 99, 235, 0.3);
+        }
+
+        :root.seraj-light-theme .ai-card,
+        :root.seraj-light-theme .stat-box {
+            background: #f8fafc;
+        }
+
+        :root.seraj-light-theme .msg-row.bot .msg-bubble {
+            box-shadow: 0 2px 10px rgba(15, 23, 42, 0.1);
+        }
+
+        :root.seraj-light-theme .chat-input,
+        :root.seraj-light-theme .form-input {
+            background: #ffffff;
+            border-color: rgba(15, 23, 42, 0.22);
+        }
+
+        :root.seraj-light-theme .badge-debt { color: #b91c1c; }
+        :root.seraj-light-theme .badge-credit { color: #15803d; }
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -638,6 +691,9 @@ function refreshAllLocalData() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+    if (typeof DB !== 'undefined' && typeof DB.applySavedTheme === 'function') {
+        DB.applySavedTheme();
+    }
     refreshAllLocalData();
     renderCustomRulesList();
     loadGmailConfigUI();
