@@ -232,10 +232,13 @@
 
                 const prodBarcode = String(product.barcode || '').trim();
                 const prodCategory = String(product.category || 'عام').trim();
-                const fallbackBuy = round2(product.purchasePrice ?? product.buyPrice ?? product._lastValidPurchase ?? 0);
+                const viewProd = (typeof DB.normalizeProductLots === 'function')
+                    ? DB.normalizeProductLots({ ...product, lots: Array.isArray(product.lots) ? product.lots.map(l => ({ ...l })) : [] })
+                    : product;
+                const fallbackBuy = round2(viewProd.purchasePrice ?? viewProd.buyPrice ?? viewProd._lastValidPurchase ?? 0);
 
-                if (Array.isArray(product.lots) && product.lots.length > 0) {
-                    product.lots.forEach(lot => {
+                if (Array.isArray(viewProd.lots) && viewProd.lots.length > 0) {
+                    viewProd.lots.forEach(lot => {
                         if (!lot) return;
                         const lotQty = round4(lot.stock);
                         if (!window.Utils.isNonZeroStock(lotQty)) return;
@@ -456,7 +459,7 @@
         async function initPage() {
             await window.SerajMegaDB.ready;
             DB.applySavedTheme();
-            window.SerajAuth.applyRoleGuards();
+            if (!window.SerajAuth.applyRoleGuards() || !window.SerajAuth.canAccess('view_inventory_cost')) return;
             updatePageBranding();
             renderTable();
         }

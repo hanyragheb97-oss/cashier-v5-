@@ -262,7 +262,8 @@
                 const invTs = window.Utils.getSafeTime(inv.timestamp || invDate) || 0;
 
                 if (!normQ) {
-                    const disc = Math.max(0, round2(inv.discount));
+                    const invSub = (inv.items || []).reduce((s, it) => s + Math.abs(round2(it.total !== undefined ? it.total : (round4(it.qty ?? it.quantity ?? 0) * round2(it.purchasePrice ?? it.buyPrice ?? it.price ?? 0)))), 0);
+                    const disc = Math.min(Math.max(0, round2(inv.discount)), Math.max(0, round2(invSub)));
                     totalDiscounts = round2(totalDiscounts + (isReturn ? -disc : disc));
                 }
 

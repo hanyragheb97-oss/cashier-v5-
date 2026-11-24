@@ -55,8 +55,10 @@
                 <tbody id="tableBody"></tbody>
                 <tfoot>
                     <tr class="report-total-footer">
-                        <td colspan="3">
-                            الإجمالي = <span id="grandTotal" class="val-green" dir="ltr">0.00</span> ج
+                        <td colspan="3" style="line-height: 1.8;">
+                            إجمالي الأصناف: <span id="grandTotal" class="val-green" dir="ltr">0.00</span> ج<br>
+                            إجمالي الخصومات: <span id="grandDiscounts" class="val-red" dir="ltr">0.00</span> ج<br>
+                            صافي المبيعات: <span id="netTotal" class="val-yellow" style="font-size: 19px;" dir="ltr">0.00</span> ج
                         </td>
                     </tr>
                 </tfoot>
@@ -121,6 +123,8 @@
         let customDateTo = null;
         let lastComputedRows = [];
         let lastGrandTotal = 0;
+        let lastGrandDiscounts = 0;
+        let lastNetTotal = 0;
 
         const safeHTML = (v) => window.Utils.sanitizeHTML(v);
         const round2 = (v) => window.Utils.round2(v);
@@ -228,12 +232,18 @@
             const normQ = window.Utils.normalizeName(document.getElementById('searchInput')?.value || '');
             const invoices = DB.getSalesInvoices(false) || [];
             const productsMap = {};
+            let totalDiscounts = 0;
 
             invoices.forEach(inv => {
                 if (!inv || inv.type === 'quotation' || inv.type === 'quote') return;
                 if (!checkDateFilter(inv.date || inv.timestamp)) return;
 
                 const isReturn = ['return', 'return_sale', 'sales_return'].includes(inv.type);
+                if (!normQ) {
+                    const invSub = (inv.items || []).reduce((s, it) => s + Math.abs(round2(it.total !== undefined ? it.total : (round4(it.qty ?? it.quantity ?? 0) * round2(it.price)))), 0);
+                    const disc = Math.min(Math.max(0, round2(inv.discount)), Math.max(0, round2(invSub)));
+                    totalDiscounts = round2(totalDiscounts + (isReturn ? -disc : disc));
+                }
 
                 (inv.items || []).forEach(item => {
                     if (!item) return;
@@ -266,9 +276,13 @@
 
             if (rows.length === 0) {
                 lastGrandTotal = 0;
+                lastGrandDiscounts = 0;
+                lastNetTotal = 0;
                 tbody.innerHTML = `<tr><td colspan="3" style="padding: 24px; color: var(--text-muted);">لا توجد مبيعات فعلية في هذه الفترة</td></tr>`;
                 document.getElementById('grandTotal').textContent = '0.00';
                 document.getElementById('grandTotal').className = 'val-green';
+                document.getElementById('grandDiscounts').textContent = '0.00';
+                document.getElementById('netTotal').textContent = '0.00';
                 return;
             }
 
@@ -287,9 +301,13 @@
             }).join('');
 
             lastGrandTotal = grandTotal;
+            lastGrandDiscounts = totalDiscounts;
+            lastNetTotal = round2(grandTotal - totalDiscounts);
             const grandEl = document.getElementById('grandTotal');
             grandEl.textContent = grandTotal.toFixed(2);
             grandEl.className = grandTotal < 0 ? 'val-red' : 'val-green';
+            document.getElementById('grandDiscounts').textContent = totalDiscounts.toFixed(2);
+            document.getElementById('netTotal').textContent = lastNetTotal.toFixed(2);
         }
 
         // =========================================================================

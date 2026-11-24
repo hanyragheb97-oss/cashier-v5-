@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>مساعد سراج الذكي | Seraj AI Assistant</title>
+    <title>المساعد الذكي</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <script src="db.js"></script>
     <style>
@@ -537,8 +537,8 @@
         <div class="brand-box">
             <div class="ai-avatar">🧠</div>
             <div class="brand-info">
-                <h1>مساعد سراج الذكي</h1>
-                <span>● متصل بقاعدة البيانات المحلية (بدون API خارجي)</span>
+                <h1 id="aiBrandTitle">المساعد الذكي</h1>
+                <span>● متصل بقاعدة البيانات المحلية (أوفلاين 100%)</span>
             </div>
         </div>
         <div class="header-actions">
@@ -548,7 +548,7 @@
             <button class="hdr-btn" onclick="openModal('dictModal')" title="تدريب المساعد على كلماتك">
                 📚 تدريب
             </button>
-            <button class="hdr-btn" onclick="openModal('gmailModal')" title="إعدادات تقارير الجيميل">
+            <button class="hdr-btn owner-only" data-role="owner" onclick="openModal('gmailModal')" title="إعدادات تقارير الجيميل">
                 📧 الجيميل
             </button>
             <a href="index.html" class="hdr-btn">🏠 الرئيسية</a>
@@ -557,20 +557,20 @@
 
     <!-- ─── Quick Suggestions Bar ─── -->
     <div class="quick-chips-bar">
-        <div class="chip" onclick="runCommand('أرباح النهاردة كام؟')">💰 أرباح النهاردة</div>
-        <div class="chip" onclick="runCommand('أرباح الشهر ده')">📈 أرباح الشهر</div>
-        <div class="chip" onclick="runCommand('في كام في الخزنة؟')">🏦 رصيد الخزينة</div>
+        <div class="chip owner-only" data-role="owner" onclick="runCommand('أرباح النهاردة كام؟')">💰 أرباح النهاردة</div>
+        <div class="chip owner-only" data-role="owner" onclick="runCommand('أرباح الشهر ده')">📈 أرباح الشهر</div>
+        <div class="chip owner-only" data-role="owner" onclick="runCommand('في كام في الخزنة؟')">🏦 رصيد الخزينة</div>
         <div class="chip" onclick="runCommand('إجمالي الديون والفلوس اللي لينا بره')">👥 ديون العملاء</div>
         <div class="chip" onclick="runCommand('إيه الأصناف اللي بالسالب أو شطبت؟')">📦 نواقص وعجز المخزن</div>
         <div class="chip" onclick="runCommand('أكتر 5 أصناف مبيعاً')">🔥 الأكثر مبيعاً</div>
-        <div class="chip" onclick="runCommand('ابعت تقرير اليومية على الجيميل')">📧 إرسال تقرير للجيميل</div>
+        <div class="chip owner-only" data-role="owner" onclick="runCommand('ابعت تقرير اليومية على الجيميل')">📧 إرسال تقرير للجيميل</div>
     </div>
 
     <!-- ─── Main Chat Stream ─── -->
     <main class="chat-container" id="chatContainer">
         <div class="msg-row bot">
             <div class="msg-bubble">
-                أهلاً بك يا هندسة في <b>مساعد سراج الذكي</b> 👋<br>
+                أهلاً بك في <b>المساعد الذكي</b> 👋<br>
                 أنا مربوط مباشرة بمحرك <code>db.js</code>، أقدر أحسبلك <b>الأرباح الصافية، المبيعات، أرصدة الخزائن، ديون العملاء والموردين، نواقص المخزن</b>، وأقدر كمان <b>أجهزلك فاتورة بيع أو أسجل مصروف أو أبعتلك تقرير على الـ Gmail</b> بالصوت أو بالكتابة.<br>
                 <div style="margin-top:8px; font-size:12px; color:var(--neon-cyan);">
                     💡 جرّب تقولي: <i>"أرباح النهاردة كام؟"</i> أو <i>"حساب عميل ..."</i> أو <i>"اعمل فاتورة لـ ... فيها 5 لمبة"</i>
@@ -605,6 +605,10 @@
             <div class="form-group">
                 <label>رابط Google Apps Script (Webhook URL):</label>
                 <input type="url" id="cfgWebhookUrl" class="form-input" placeholder="https://script.google.com/macros/s/.../exec">
+            </div>
+            <div class="form-group">
+                <label>الرمز السري للحماية (secretToken):</label>
+                <input type="password" id="cfgSecretToken" class="form-input" placeholder="أدخل الرمز السري المطابق لـ Apps Script">
             </div>
             <div class="form-group" style="display:flex; align-items:center; gap:8px;">
                 <input type="checkbox" id="cfgAutoDailyEmail" style="width:18px;height:18px;">
@@ -690,9 +694,22 @@ function refreshAllLocalData() {
     }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+function safeAIHtml(str) {
+    if (window.Utils && typeof window.Utils.sanitizeHTML === 'function') {
+        return window.Utils.sanitizeHTML(String(str ?? ''));
+    }
+    return String(str ?? '').replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag]));
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+    if (window.SerajMegaDB && window.SerajMegaDB.ready) {
+        await window.SerajMegaDB.ready;
+    }
     if (typeof DB !== 'undefined' && typeof DB.applySavedTheme === 'function') {
         DB.applySavedTheme();
+    }
+    if (window.SerajAuth && typeof window.SerajAuth.applyRoleGuards === 'function') {
+        window.SerajAuth.applyRoleGuards();
     }
     refreshAllLocalData();
     renderCustomRulesList();
@@ -931,8 +948,10 @@ function processUserIntent(originalText) {
     // 0. فحص هل يطلب تدريب كلمة جديدة مباشرة في الشات؟ ("لما اقول X افهم Y")
     let teachMatch = originalText.match(/لما اقول\s+(.+?)\s+افهم\s+(.+)/i);
     if (teachMatch) {
-        saveCustomRuleDirect(teachMatch[1].trim(), teachMatch[2].trim());
-        let reply = `✅ تمام يا هندسة! حفظت في قاموسي الذكي: لما تقولي <b>"${teachMatch[1].trim()}"</b> هفهم فوراً إنك تقصد <b>"${teachMatch[2].trim()}"</b>.`;
+        let t1 = teachMatch[1].trim();
+        let t2 = teachMatch[2].trim();
+        saveCustomRuleDirect(t1, t2);
+        let reply = `✅ تمام! حفظت في القاموس الذكي: لما تقول <b>"${safeAIHtml(t1)}"</b> هفهم فوراً إنك تقصد <b>"${safeAIHtml(t2)}"</b>.`;
         appendBotMessage(reply, "تم حفظ الكلمة في القاموس الذكي");
         return;
     }
@@ -940,8 +959,12 @@ function processUserIntent(originalText) {
     let expandedText = convertSpokenNumbers(applyCustomDictionary(originalText));
     let q = normText(expandedText);
 
-    // 1. نية إرسال بريد جيميل
+    // 1. نية إرسال بريد جيميل (للمالك فقط)
     if (q.includes('جيميل') || q.includes('ايميل') || q.includes('بريد') || (q.includes('ابعت') && q.includes('تقرير'))) {
+        if (window.SerajAuth && !window.SerajAuth.canAccess('ai_financial_queries')) {
+            appendBotMessage('⛔ إرسال التقارير المالية بالبريد مخصص لصاحب المحل (المالك) فقط.', 'هذا الإجراء مخصص للمالك فقط');
+            return;
+        }
         sendDailyReportToGmail(false);
         return;
     }
@@ -1010,80 +1033,28 @@ function processUserIntent(originalText) {
 
 // ─── أ. حساب الأرباح والمبيعات بدقة ───
 function handleProfitAndSalesQuery(queryText) {
+    if (window.SerajAuth && !window.SerajAuth.canAccess('ai_financial_queries')) {
+        appendBotMessage('⛔ الاطلاع على تقارير الأرباح والتكاليف مخصص لصاحب المحل (المالك) فقط.', 'تقارير الأرباح مخصصة للمالك فقط');
+        return;
+    }
     const range = extractDateRange(queryText);
-    let grossSales = 0;
-    let totalReturns = 0;
-    let totalCostOfGoods = 0;
-    let totalCollectedCash = 0;
-    let salesCount = 0;
-    let returnCount = 0;
+    const isAllTime = range.label.includes('كل الأوقات');
+    const toLocalDate = (ms) => (window.Utils && typeof window.Utils.getLocalDateString === 'function')
+        ? window.Utils.getLocalDateString(ms)
+        : new Date(ms).toISOString().slice(0, 10);
+    const startIso = isAllTime ? null : toLocalDate(range.startMs);
+    const endIso = isAllTime ? null : toLocalDate(range.endMs);
+    const fin = (typeof DB !== 'undefined' && typeof DB.getFinancialSummary === 'function')
+        ? DB.getFinancialSummary(startIso, endIso)
+        : { netSales: 0, netCOGS: 0, grossProfit: 0, totalExpenses: 0, netProfit: 0, salesCount: 0, salesReturnCount: 0 };
 
-    // خريطة سريعة لآخر سعر شراء لكل صنف في المخزن (شاملاً الأصناف المؤرشفة لدقة الأرباح التاريخية)
-    const prodCostMap = new Map();
-    const allProdsForCost = (typeof DB !== 'undefined' && typeof DB.getProducts === 'function') ? DB.getProducts(true) : productsDB;
-    allProdsForCost.forEach(p => {
-        if (!p) return;
-        let cost = parseFloat(p.purchasePrice ?? p.buyPrice ?? p.costPrice) || 0;
-        if (Array.isArray(p.lots) && p.lots.length > 0) {
-            let lastLotWithCost = [...p.lots].reverse().find(l => (parseFloat(l.purchasePrice ?? l.buyPrice ?? l.costPrice) || 0) > 0);
-            if (lastLotWithCost) cost = parseFloat(lastLotWithCost.purchasePrice ?? lastLotWithCost.buyPrice ?? lastLotWithCost.costPrice) || cost;
-        }
-        prodCostMap.set(String(p.id), cost);
-        prodCostMap.set(normText(p.name), cost);
-    });
-
-    salesInvoicesDB.forEach(inv => {
-        if (!inv || inv.isCanceled || inv.isDeleted || inv.status === 'deleted' || inv.type === 'canceled' || inv.type === 'quotation') return;
-        let t = parseItemTime(inv);
-        if (t < range.startMs || t > range.endMs) return;
-
-        let rawTotal = Math.abs(parseFloat(inv.total) || 0);
-        let rawDisc = Math.abs(parseFloat(inv.discount) || 0);
-        let chkPaid = parseFloat(inv.initialPaid ?? inv.paid) || 0;
-        let origRem = parseFloat(inv.initialRemaining ?? inv.remaining) || 0;
-        let netTotal = (Math.abs((chkPaid + origRem) - rawTotal) < 0.05 && rawDisc > 0) ? rawTotal : Math.max(0, rawTotal - rawDisc);
-        let paidVal = Math.abs(parseFloat(inv.initialPaid ?? inv.paid) || 0);
-        let isReturn = (inv.type === 'return' || inv.type === 'return_sale' || inv.type === 'sales_return');
-
-        // حساب تكلفة البضاعة المباعة داخل الفاتورة
-        let invCost = 0;
-        if (Array.isArray(inv.items)) {
-            inv.items.forEach(item => {
-                let qty = Math.abs(parseFloat(item.qty || item.quantity) || 0);
-                let unitCost = parseFloat(item.purchasePrice ?? item.buyPrice ?? item.costPrice) || 0;
-                if (unitCost <= 0) {
-                    unitCost = prodCostMap.get(String(item.id || item.productId)) || prodCostMap.get(normText(item.name)) || 0;
-                }
-                invCost += (qty * unitCost);
-            });
-        }
-
-        if (isReturn) {
-            totalReturns += netTotal;
-            totalCostOfGoods -= invCost;
-            returnCount++;
-        } else {
-            grossSales += netTotal;
-            totalCostOfGoods += invCost;
-            totalCollectedCash += paidVal;
-            salesCount++;
-        }
-    });
-
-    // حساب المصروفات في نفس الفترة (متوافق مع type: 'expenses' واستبعاد المعكوس)
-    let periodExpenses = 0;
-    treasuryMovesDB.forEach(m => {
-        if (!m || m.isDeleted || m.isCanceled || m._isReversed || m._isReversal) return;
-        let t = parseItemTime(m);
-        if (t < range.startMs || t > range.endMs) return;
-        if (m.type === 'expenses' || m.type === 'expense') {
-            periodExpenses += (parseFloat(m.amountDeduct || m.amount) || 0);
-        }
-    });
-
-    let netSales = grossSales - totalReturns;
-    let grossProfit = netSales - totalCostOfGoods;
-    let netProfitAfterExpenses = grossProfit - periodExpenses;
+    const netSales = fin.netSales || 0;
+    const totalCostOfGoods = fin.netCOGS || 0;
+    const grossProfit = fin.grossProfit || 0;
+    const periodExpenses = fin.totalExpenses || 0;
+    const netProfitAfterExpenses = fin.netProfit || 0;
+    const salesCount = fin.salesCount || 0;
+    const returnCount = fin.salesReturnCount || 0;
 
     let html = `
         <div>إليك التقرير المالي الدقيق لفترة: <b>${range.label}</b></div>
@@ -1123,6 +1094,10 @@ function handleProfitAndSalesQuery(queryText) {
 
 // ─── ب. استعلام الخزينة والسيولة ───
 function handleTreasuryQuery(queryText) {
+    if (window.SerajAuth && !window.SerajAuth.canAccess('ai_financial_queries')) {
+        appendBotMessage('⛔ الاطلاع على أرصدة الخزائن والسيولة مخصص لصاحب المحل (المالك) فقط.', 'أرصدة الخزائن مخصصة للمالك فقط');
+        return;
+    }
     if (typeof DB !== 'undefined' && typeof DB.recalculateVaultBalances === 'function') {
         DB.recalculateVaultBalances();
     }
@@ -1201,7 +1176,7 @@ function handleGeneralDebtsQuery() {
 
     let rowsHtml = top5.map(d => `
         <tr>
-            <td><b>${d.name}</b></td>
+            <td><b>${safeAIHtml(d.name)}</b></td>
             <td><span class="badge badge-debt">عليه ${fmtMoney(d.debt)} ج</span></td>
         </tr>
     `).join('') || '<tr><td colspan="2">لا توجد مديونيات على العملاء حالياً 🎉</td></tr>';
@@ -1246,7 +1221,7 @@ function handlePersonAccountQuery(queryText) {
     let matchedSuppliers = suppliersDB.filter(s => s && !s.isDeleted && normText(s.name).includes(cleanQ));
 
     if (matchedCustomers.length === 0 && matchedSuppliers.length === 0) {
-        appendBotMessage(`🔍 لم أجد عميلاً أو مورداً يطابق اسم <b>"${cleanQ}"</b>. تأكد من كتابة جزء من الاسم بشكل صحيح.`, `لم أجد عميلاً أو مورداً بهذا الاسم`);
+        appendBotMessage(`🔍 لم أجد عميلاً أو مورداً يطابق اسم <b>"${safeAIHtml(cleanQ)}"</b>. تأكد من كتابة جزء من الاسم بشكل صحيح.`, `لم أجد عميلاً أو مورداً بهذا الاسم`);
         return;
     }
 
@@ -1262,11 +1237,11 @@ function handlePersonAccountQuery(queryText) {
         html += `
             <div class="ai-card">
                 <div class="ai-card-title">
-                    <span>👤 عميل: ${c.name}</span>
+                    <span>👤 عميل: ${safeAIHtml(c.name)}</span>
                     <span class="badge ${badgeClass}">${statusText}</span>
                 </div>
                 <div style="font-size:12px; color:var(--text-muted);">
-                    📞 الهاتف: ${c.phone || 'غير مسجل'} | آخر نشاط: ${c.lastActivityDate || 'غير محدد'}
+                    📞 الهاتف: ${safeAIHtml(c.phone || 'غير مسجل')} | آخر نشاط: ${safeAIHtml(c.lastActivityDate || 'غير محدد')}
                 </div>
             </div>
         `;
@@ -1280,7 +1255,7 @@ function handlePersonAccountQuery(queryText) {
         html += `
             <div class="ai-card">
                 <div class="ai-card-title">
-                    <span>🚛 مورد: ${s.name}</span>
+                    <span>🚛 مورد: ${safeAIHtml(s.name)}</span>
                     <span class="badge badge-debt">${statusText}</span>
                 </div>
             </div>
@@ -1304,15 +1279,15 @@ function handleLowStockQuery() {
 
     let rows = negativeItems.slice(0, 8).map(p => `
         <tr>
-            <td><b>${p.name}</b></td>
-            <td><span class="badge badge-debt">سالب (${p.stock})</span></td>
+            <td><b>${safeAIHtml(p.name)}</b></td>
+            <td><span class="badge badge-debt">سالب (${safeAIHtml(p.stock)})</span></td>
             <td>${fmtMoney(p.sellPrice || p.price)} ج</td>
         </tr>
     `).join('');
 
     let zeroRows = zeroItems.slice(0, 7).map(p => `
         <tr>
-            <td>${p.name}</td>
+            <td>${safeAIHtml(p.name)}</td>
             <td><span class="badge" style="background:rgba(245,158,11,0.15);color:#fcd34d;">رصيد 0</span></td>
             <td>${fmtMoney(p.sellPrice || p.price)} ج</td>
         </tr>
@@ -1357,14 +1332,14 @@ function handleTopSellingProductsQuery(queryText) {
     let sorted = [...qtyMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
     let rows = sorted.map(([name, qty], i) => `
         <tr>
-            <td>#${i + 1} <b>${name}</b></td>
-            <td><span class="badge badge-credit">${qty} قطعة</span></td>
+            <td>#${i + 1} <b>${safeAIHtml(name)}</b></td>
+            <td><span class="badge badge-credit">${safeAIHtml(qty)} قطعة</span></td>
         </tr>
     `).join('') || '<tr><td colspan="2">لا توجد مبيعات مسجلة في هذه الفترة</td></tr>';
 
     let html = `
         <div class="ai-card">
-            <div class="ai-card-title"><span>🔥 الأكثر مبيعاً (${range.label})</span></div>
+            <div class="ai-card-title"><span>🔥 الأكثر مبيعاً (${safeAIHtml(range.label)})</span></div>
             <table class="mini-table">
                 <thead><tr><th>الصنف</th><th>الكمية المباعة</th></tr></thead>
                 <tbody>${rows}</tbody>
@@ -1383,7 +1358,7 @@ function handleSmartUniversalSearch(queryText) {
         .trim();
 
     if (!clean) {
-        appendBotMessage("أهلاً بك يا هندسة! اسألني عن أي صنف، عميل، أرباح، أو اطلب مني عمل فاتورة أو تسجيل مصروف.");
+        appendBotMessage("أهلاً بك! اسألني عن أي صنف أو عميل، أو اطلب مني عمل فاتورة أو تسجيل مصروف.");
         return;
     }
 
@@ -1395,6 +1370,7 @@ function handleSmartUniversalSearch(queryText) {
     });
 
     if (matchedProds.length > 0) {
+        let canViewBuyPrice = !window.SerajAuth || window.SerajAuth.canAccess('view_purchase_prices');
         let rows = matchedProds.slice(0, 6).map(p => {
             let st = (Array.isArray(p.lots) && p.lots.length > 0)
                 ? p.lots.reduce((sum, l) => sum + (parseFloat(l.stock) || 0), 0)
@@ -1404,10 +1380,10 @@ function handleSmartUniversalSearch(queryText) {
             let buy = parseFloat(lastLot ? (lastLot.purchasePrice ?? lastLot.buyPrice) : (p.purchasePrice ?? p.buyPrice)) || parseFloat(p.purchasePrice ?? p.buyPrice) || 0;
             return `
                 <tr>
-                    <td><b>${p.name}</b></td>
-                    <td><span class="badge ${st > 0 ? 'badge-credit' : 'badge-debt'}">${st}</span></td>
+                    <td><b>${safeAIHtml(p.name)}</b></td>
+                    <td><span class="badge ${st > 0 ? 'badge-credit' : 'badge-debt'}">${safeAIHtml(st)}</span></td>
                     <td>${fmtMoney(sell)} ج</td>
-                    <td style="color:var(--text-muted);">${fmtMoney(buy)} ج</td>
+                    ${canViewBuyPrice ? `<td style="color:var(--text-muted);">${fmtMoney(buy)} ج</td>` : ''}
                 </tr>
             `;
         }).join('');
@@ -1416,11 +1392,11 @@ function handleSmartUniversalSearch(queryText) {
         let spoken = `صنف ${first.name} رصيده الحالي ${first.stock || 0}، وسعر بيعه ${fmtMoney(first.sellPrice ?? first.price)} جنيه.`;
 
         let html = `
-            <div>نتائج البحث في المخزن عن <b>"${clean}"</b>:</div>
+            <div>نتائج البحث في المخزن عن <b>"${safeAIHtml(clean)}"</b>:</div>
             <div class="ai-card">
                 <div class="ai-card-title"><span>📦 بطاقة الأصناف (${matchedProds.length} نتيجة)</span></div>
                 <table class="mini-table">
-                    <thead><tr><th>الصنف</th><th>الرصيد</th><th>سعر البيع</th><th>الشراء</th></tr></thead>
+                    <thead><tr><th>الصنف</th><th>الرصيد</th><th>سعر البيع</th>${canViewBuyPrice ? '<th>الشراء</th>' : ''}</tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
             </div>
@@ -1502,8 +1478,8 @@ function handleCreateInvoiceIntent(text) {
 
     let itemsRows = parsedItems.map(it => `
         <tr>
-            <td><b>${it.name}</b></td>
-            <td>${it.qty}</td>
+            <td><b>${safeAIHtml(it.name)}</b></td>
+            <td>${safeAIHtml(it.qty)}</td>
             <td>${fmtMoney(it.price)} ج</td>
             <td><b>${fmtMoney(it.total)} ج</b></td>
         </tr>
@@ -1514,7 +1490,7 @@ function handleCreateInvoiceIntent(text) {
         <div class="ai-card" id="${actionId}">
             <div class="ai-card-title">
                 <span>🧾 معاينة فاتورة بيع جديدة</span>
-                <span>العميل: ${custName}</span>
+                <span>العميل: ${safeAIHtml(custName)}</span>
             </div>
             <table class="mini-table">
                 <thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
@@ -1541,7 +1517,7 @@ function confirmPendingInvoice(actionId, btnEl) {
 
     const payMode = document.getElementById('payMode_' + actionId)?.value || 'cash';
     if (payMode === 'delayed' && (!data.customerName || data.customerName === 'عميل نقدي')) {
-        alert('لا يمكن حفظ فاتورة آجل بدون اسم عميل!');
+        if (typeof window.SerajAlert === 'function') window.SerajAlert('لا يمكن حفظ فاتورة آجل بدون اسم عميل!', 'error');
         btnEl.disabled = false;
         return;
     }
@@ -1560,13 +1536,13 @@ function confirmPendingInvoice(actionId, btnEl) {
         if (existingC) {
             finalCustId = existingC.id;
         } else {
-            finalCustId = (window.Utils && window.Utils.generateUniqueId) ? window.Utils.generateUniqueId() : String(now);
+            finalCustId = (window.Utils && window.Utils.generateUniqueId) ? window.Utils.generateUniqueId('C') : String(now);
             customersDB.push({
                 id: finalCustId,
+                _cloudKey: window.Utils.generateUUID('CUST'),
                 name: data.customerName,
                 phone: '',
                 balance: 0,
-                transactions: [],
                 lastActivityDate: todayIso,
                 _lastModified: now
             });
@@ -1574,123 +1550,17 @@ function confirmPendingInvoice(actionId, btnEl) {
         }
     }
 
-    // 2. خصم المخزن بنظام (FIFO) مع تثبيت الأسعار السطحية لمنع تصفيرها عند نفاد الدفعات
-    data.items.forEach(soldItem => {
-        let prod = productsDB.find(p => String(p.id) === String(soldItem.id));
-        if (!prod) return;
-        let qtyToDeduct = parseFloat(soldItem.qty) || 0;
-        let savedBuy = parseFloat(soldItem.purchasePrice ?? soldItem.buyPrice ?? prod.purchasePrice ?? prod.buyPrice) || 0;
-        let savedSell = parseFloat(soldItem.price ?? soldItem.sellPrice ?? prod.price ?? prod.sellPrice) || 0;
-
-        if (Array.isArray(prod.lots) && prod.lots.length > 0) {
-            for (let i = 0; i < prod.lots.length && qtyToDeduct > 0; i++) {
-                let lotStock = parseFloat(prod.lots[i].stock) || 0;
-                if (lotStock > 0) {
-                    if (lotStock >= qtyToDeduct) {
-                        prod.lots[i].stock = Number((lotStock - qtyToDeduct).toFixed(2));
-                        qtyToDeduct = 0;
-                    } else {
-                        qtyToDeduct = Number((qtyToDeduct - lotStock).toFixed(2));
-                        prod.lots[i].stock = 0;
-                    }
-                }
-            }
-            prod.lots = prod.lots.filter(l => (parseFloat(l.stock) || 0) !== 0);
-            if (qtyToDeduct > 0) {
-                prod.lots.push({
-                    id: 'lot_def_' + now,
-                    supplier: 'سحب بالسالب (عجز)',
-                    stock: -Number(qtyToDeduct.toFixed(2)),
-                    purchasePrice: savedBuy,
-                    buyPrice: savedBuy,
-                    price: savedSell,
-                    sellPrice: savedSell,
-                    date: todayIso
-                });
-            }
-            prod.stock = prod.lots.reduce((sum, l) => sum + (parseFloat(l.stock) || 0), 0);
-        } else {
-            prod.stock = Number(((parseFloat(prod.stock) || 0) - qtyToDeduct).toFixed(2));
-        }
-        if (savedSell > 0) { prod.price = prod.sellPrice = savedSell; }
-        if (savedBuy > 0) { prod.purchasePrice = prod.buyPrice = savedBuy; }
-        prod._lastModified = now;
-
-        // فك الكرتونة التلقائي إذا كان الصنف فرعياً ونزل رصيده للسالب
-        if (prod.autoParentId && String(prod.autoParentId) !== String(prod.id) && (parseFloat(prod.stock) || 0) < 0) {
-            let parentP = productsDB.find(x => x && String(x.id) === String(prod.autoParentId));
-            let rate = parseFloat(prod.autoConversionRate) || 50;
-            if (parentP && rate > 0) {
-                let deficitUnits = Math.abs(parseFloat(prod.stock) || 0);
-                let cartonsNeeded = Math.ceil(deficitUnits / rate);
-
-                let parentLastLot = (Array.isArray(parentP.lots) && parentP.lots.length > 0) ? parentP.lots[parentP.lots.length - 1] : null;
-                let parentBuy = parseFloat(parentLastLot ? (parentLastLot.purchasePrice ?? parentLastLot.buyPrice) : (parentP.purchasePrice ?? parentP.buyPrice)) || 0;
-                let parentSell = parseFloat(parentLastLot ? (parentLastLot.price ?? parentLastLot.sellPrice) : (parentP.price ?? parentP.sellPrice)) || 0;
-                let unitBuyCost = parentBuy > 0 ? Number((parentBuy / rate).toFixed(4)) : savedBuy;
-
-                if (!Array.isArray(parentP.lots)) parentP.lots = [];
-                if (parentP.lots.length === 0 && (parseFloat(parentP.stock) || 0) > 0) {
-                    parentP.lots.push({
-                        supplier: 'رصيد سابق بالمخزن',
-                        stock: parseFloat(parentP.stock) || 0,
-                        purchasePrice: parentBuy,
-                        buyPrice: parentBuy,
-                        price: parentSell,
-                        sellPrice: parentSell,
-                        date: todayIso
-                    });
-                }
-
-                let remCartons = cartonsNeeded;
-                for (let i = 0; i < parentP.lots.length && remCartons > 0; i++) {
-                    let lStock = parseFloat(parentP.lots[i].stock) || 0;
-                    if (lStock > 0) {
-                        if (lStock >= remCartons) {
-                            parentP.lots[i].stock = Number((lStock - remCartons).toFixed(2));
-                            remCartons = 0;
-                        } else {
-                            remCartons = Number((remCartons - lStock).toFixed(2));
-                            parentP.lots[i].stock = 0;
-                        }
-                    }
-                }
-                parentP.lots = parentP.lots.filter(l => (parseFloat(l.stock) || 0) !== 0);
-                if (remCartons > 0) {
-                    parentP.lots.push({
-                        supplier: `سحب تلقائي (فك كرتونة) لصالح : ${prod.name}`,
-                        stock: -Number(remCartons.toFixed(2)),
-                        purchasePrice: parentBuy,
-                        buyPrice: parentBuy,
-                        price: parentSell,
-                        sellPrice: parentSell,
-                        date: todayIso
-                    });
-                }
-                if (parentSell > 0) { parentP.price = parentP.sellPrice = parentSell; }
-                if (parentBuy > 0) { parentP.purchasePrice = parentP.buyPrice = parentBuy; }
-                parentP.stock = parentP.lots.reduce((sum, l) => sum + (parseFloat(l.stock) || 0), 0);
-                parentP._lastModified = now;
-
-                let netUnitsRemaining = Number(((cartonsNeeded * rate) - deficitUnits).toFixed(2));
-                prod.lots = (prod.lots || []).filter(l => (parseFloat(l.stock) || 0) > 0);
-                if (netUnitsRemaining > 0) {
-                    prod.lots.push({
-                        supplier: `سحب تلقائي من : ${parentP.name}`,
-                        stock: netUnitsRemaining,
-                        purchasePrice: unitBuyCost,
-                        buyPrice: unitBuyCost,
-                        price: savedSell,
-                        sellPrice: savedSell,
-                        date: todayIso
-                    });
-                }
-                prod.stock = prod.lots.reduce((sum, l) => sum + (parseFloat(l.stock) || 0), 0);
-            }
-        }
-    });
-
-    if (typeof DB !== 'undefined' && DB.saveProducts) DB.saveProducts(productsDB);
+    // 2. خصم المخزن وفك الكراتين عبر المحرك المركزي الموحد DB.deductStockFIFO
+    let autoUnpackEvents = [];
+    if (typeof DB !== 'undefined' && typeof DB.deductStockFIFO === 'function') {
+        const allProductsFull = DB.getProducts(true) || productsDB;
+        const fifoRes = DB.deductStockFIFO(data.items, allProductsFull, {
+            autoUnpack: true,
+            autoSave: true,
+            cloudTransaction: true
+        });
+        autoUnpackEvents = Array.isArray(fifoRes && fifoRes.autoUnpackEvents) ? fifoRes.autoUnpackEvents : [];
+    }
 
     // 3. حفظ الفاتورة (المحرك المركزي DB.saveSalesInvoices يسجل حركة الخزينة تلقائياً بدون تكرار)
     let invId = (window.Utils && typeof window.Utils.generateInvoiceId === 'function')
@@ -1702,6 +1572,7 @@ function confirmPendingInvoice(actionId, btnEl) {
     let newInv = {
         id: invId,
         invoiceNo: invId,
+        _cloudKey: (window.Utils && window.Utils.generateUUID) ? window.Utils.generateUUID('SINV') : String(now),
         date: todayIso,
         timestamp: now,
         _lastModified: now,
@@ -1710,7 +1581,9 @@ function confirmPendingInvoice(actionId, btnEl) {
         customer: data.customerName === 'عميل نقدي' ? null : data.customerName,
         customerId: finalCustId || null,
         type: remAmt > 0 ? 'delayed' : 'sales',
+        subTotal: data.total,
         total: data.total,
+        isNetTotal: true,
         discount: 0,
         paid: paidAmt,
         initialPaid: paidAmt,
@@ -1719,7 +1592,8 @@ function confirmPendingInvoice(actionId, btnEl) {
         vault: 'main',
         treasury: 'main',
         notes: 'فاتورة عبر المساعد الذكي',
-        items: data.items
+        items: data.items,
+        autoUnpackEvents: autoUnpackEvents
     };
 
     salesInvoicesDB.unshift(newInv);
@@ -1746,7 +1620,7 @@ function handleCreateExpenseIntent(text) {
         <div class="ai-card" id="${actionId}">
             <div class="ai-card-title"><span>💸 معاينة تسجيل مصروف</span></div>
             <div style="font-size:14px; margin-bottom:8px;">
-                المبلغ: <b style="color:var(--neon-red);">${fmtMoney(amount)} ج</b> | البيان: <b>${notes}</b>
+                المبلغ: <b style="color:var(--neon-red);">${fmtMoney(amount)} ج</b> | البيان: <b>${safeAIHtml(notes)}</b>
             </div>
             <button class="action-btn" onclick="confirmPendingExpense('${actionId}', this)">✅ تأكيد صرف المبلغ من الخزينة الرئيسية</button>
         </div>
@@ -1833,34 +1707,52 @@ function handleAddShortageIntent(text) {
         localStorage.setItem('seraj_smart_notes', JSON.stringify(smartNotesDB));
     }
 
-    appendBotMessage(`✅ تم تسجيل <b>"${parsedName}"</b> (الكمية: ${parsedQty}) في المفكرة الذكية بنجاح!`, `تم إضافة ${parsedName} في النواقص`);
+    appendBotMessage(`✅ تم تسجيل <b>"${safeAIHtml(parsedName)}"</b> (الكمية: ${safeAIHtml(parsedQty)}) في المفكرة الذكية بنجاح!`, `تم إضافة ${parsedName} في النواقص`);
 }
 
 /* ============================================================================
    7. نظام تقارير الـ Gmail التلقائي + طابور الأوفلاين
    ============================================================================ */
+function getAiShopName() {
+    if (typeof DB !== 'undefined' && typeof DB.getStoreSettings === 'function') {
+        return DB.getStoreSettings().shopName || (window.APP_BRAND_CONFIG && window.APP_BRAND_CONFIG.appName) || 'نظام الكاشير الذكي';
+    }
+    return (window.APP_BRAND_CONFIG && window.APP_BRAND_CONFIG.appName) || 'نظام الكاشير الذكي';
+}
+
 function saveGmailConfig() {
-    let cfg = {
-        emailTo: document.getElementById('cfgEmailTo').value.trim(),
-        webhookUrl: document.getElementById('cfgWebhookUrl').value.trim(),
-        autoDaily: document.getElementById('cfgAutoDailyEmail').checked
-    };
-    localStorage.setItem('seraj_ai_gmail_cfg', JSON.stringify(cfg));
+    const email = (document.getElementById('cfgEmailTo')?.value || '').trim();
+    const url = (document.getElementById('cfgWebhookUrl')?.value || '').trim();
+    const secretToken = (document.getElementById('cfgSecretToken')?.value || '').trim();
+    const enabled = Boolean(document.getElementById('cfgAutoDailyEmail')?.checked);
+    if (typeof DB !== 'undefined' && typeof DB.saveAppsScriptConfig === 'function') {
+        DB.saveAppsScriptConfig({ email, url, secretToken, enabled });
+    }
     closeModal('gmailModal');
-    appendBotMessage("✅ تم حفظ إعدادات الربط مع الـ Gmail بنجاح!");
+    appendBotMessage("✅ تم حفظ إعدادات الربط الموحد مع الـ Gmail (Google Apps Script) بنجاح!");
 }
 
 function loadGmailConfigUI() {
-    let cfg = JSON.parse(localStorage.getItem('seraj_ai_gmail_cfg') || '{}');
-    if (cfg.emailTo) document.getElementById('cfgEmailTo').value = cfg.emailTo;
-    if (cfg.webhookUrl) document.getElementById('cfgWebhookUrl').value = cfg.webhookUrl;
-    if (cfg.autoDaily) document.getElementById('cfgAutoDailyEmail').checked = true;
+    const cfg = (typeof DB !== 'undefined' && typeof DB.getAppsScriptConfig === 'function')
+        ? DB.getAppsScriptConfig()
+        : { email: '', url: '', secretToken: '', enabled: false };
+    if (cfg.email && document.getElementById('cfgEmailTo')) document.getElementById('cfgEmailTo').value = cfg.email;
+    if (cfg.url && document.getElementById('cfgWebhookUrl')) document.getElementById('cfgWebhookUrl').value = cfg.url;
+    if (cfg.secretToken && document.getElementById('cfgSecretToken')) document.getElementById('cfgSecretToken').value = cfg.secretToken;
+    if (document.getElementById('cfgAutoDailyEmail')) document.getElementById('cfgAutoDailyEmail').checked = Boolean(cfg.enabled);
 }
 
 function copyGasCode() {
-    let code = document.getElementById('gasCodeBox').textContent;
-    navigator.clipboard.writeText(code);
-    alert("تم نسخ كود Google Apps Script بنجاح!");
+    let code = document.getElementById('gasCodeBox')?.textContent || '';
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        navigator.clipboard.writeText(code).then(() => {
+            if (typeof window.SerajAlert === 'function') window.SerajAlert('تم نسخ كود Google Apps Script بنجاح!', 'success');
+        }).catch(() => {
+            if (typeof window.SerajAlert === 'function') window.SerajAlert('تعذر النسخ التلقائي، يرجى نسخ الكود يدوياً.', 'error');
+        });
+    } else if (typeof window.SerajAlert === 'function') {
+        window.SerajAlert('المتصفح لا يدعم النسخ التلقائي، يرجى تحديد الكود ونسخه يدوياً.', 'info');
+    }
 }
 
 function buildDailyReportHTML() {
@@ -1905,7 +1797,7 @@ function buildDailyReportHTML() {
     return `
         <div dir="rtl" style="font-family:Tahoma,Arial,sans-serif; max-width:600px; margin:auto; border:1px solid #ddd; border-radius:10px; overflow:hidden;">
             <div style="background:#0f172a; color:#00f2fe; padding:16px; text-align:center;">
-                <h2 style="margin:0;">تقرير سراج كاشير اليومي</h2>
+                <h2 style="margin:0;">${safeAIHtml(getAiShopName())} — التقرير اليومي</h2>
                 <p style="color:#cbd5e1; margin:5px 0 0;">التاريخ: ${new Date().toLocaleDateString('ar-EG')}</p>
             </div>
             <div style="padding:16px; background:#ffffff; color:#1e293b;">
@@ -1929,76 +1821,57 @@ function buildDailyReportHTML() {
     `;
 }
 
-function sendDailyReportToGmail(fromModal = false) {
+async function sendDailyReportToGmail(fromModal = false) {
+    if (window.SerajAuth && !window.SerajAuth.canAccess('ai_financial_queries')) {
+        appendBotMessage('⛔ إرسال التقارير المالية بالبريد مخصص لصاحب المحل (المالك) فقط.');
+        return;
+    }
     if (fromModal) saveGmailConfig();
-    let cfg = JSON.parse(localStorage.getItem('seraj_ai_gmail_cfg') || '{}');
-    if (!cfg.emailTo || !cfg.webhookUrl) {
+    const cfg = (typeof DB !== 'undefined' && typeof DB.getAppsScriptConfig === 'function') ? DB.getAppsScriptConfig() : {};
+    if (!cfg.email || !cfg.url || !cfg.secretToken) {
         openModal('gmailModal');
-        appendBotMessage("⚠️ يرجى إدخال بريدك الـ Gmail ورابط Google Script أولاً في نافذة الإعدادات التي فُتحت أمامك.");
+        appendBotMessage("⚠️ يرجى إدخال البريد الإلكتروني ورابط Google Script والرمز السري (secretToken) أولاً.");
         return;
     }
 
-    let payload = {
-        to: cfg.emailTo,
-        subject: `📊 تقرير سراج كاشير اليومي - ${new Date().toLocaleDateString('ar-EG')}`,
+    const todayIso = (window.Utils && typeof window.Utils.getLocalDateString === 'function')
+        ? window.Utils.getLocalDateString()
+        : new Date().toISOString().slice(0, 10);
+    const payload = {
+        action: 'daily_report_html',
+        date: todayIso,
+        subject: `📊 التقرير اليومي (${getAiShopName()}) - ${todayIso}`,
         html: buildDailyReportHTML(),
-        timestamp: Date.now()
+        summary: (typeof DB !== 'undefined' && typeof DB.getFinancialSummary === 'function') ? DB.getFinancialSummary(todayIso, todayIso) : null
     };
 
     if (!navigator.onLine) {
-        queueEmailOffline(payload);
-        appendBotMessage("📴 الجهاز غير متصل بالإنترنت حالياً؛ تم حفظ التقرير في <b>طابور الإيميلات الذكي</b> وسيتم إرساله إلى الجيميل تلقائياً فور عودة الإنترنت!");
+        if (typeof DB !== 'undefined' && typeof DB.queueEmailReport === 'function') DB.queueEmailReport(payload);
+        appendBotMessage("📴 الجهاز غير متصل بالإنترنت حالياً؛ تم حفظ التقرير في <b>طابور الإيميلات الموحد</b> وسيُرسل تلقائياً فور عودة الإنترنت!");
         return;
     }
 
-    appendBotMessage("⏳ جاري إرسال التقرير المالي المفصل إلى بريدك على الـ Gmail...");
-    dispatchEmailWebhook(cfg.webhookUrl, payload, true);
-}
-
-function dispatchEmailWebhook(webhookUrl, payload, notifyChat = false) {
-    fetch(webhookUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
-    }).then(() => {
-        if (notifyChat) {
-            appendBotMessage(`✅ تم إرسال التقرير المالي بنجاح إلى بريدك: <b>${payload.to}</b>`, "تم إرسال التقرير إلى الجيميل بنجاح");
-        }
-    }).catch(() => {
-        queueEmailOffline(payload);
-    });
-}
-
-function queueEmailOffline(payload) {
-    let q = JSON.parse(localStorage.getItem('seraj_email_queue') || '[]');
-    q.push(payload);
-    localStorage.setItem('seraj_email_queue', JSON.stringify(q));
+    appendBotMessage("⏳ جاري إرسال التقرير المالي المفصل والتحقق من الاستلام...");
+    const res = (typeof DB !== 'undefined' && typeof DB.sendToAppsScript === 'function')
+        ? await DB.sendToAppsScript(payload)
+        : { ok: false, reason: 'unavailable' };
+    if (res && res.ok) {
+        appendBotMessage(`✅ تم إرسال التقرير المالي بنجاح إلى بريدك: <b>${safeAIHtml(cfg.email)}</b>`, "تم إرسال التقرير إلى البريد بنجاح");
+    } else {
+        if (typeof DB !== 'undefined' && typeof DB.queueEmailReport === 'function') DB.queueEmailReport(payload);
+        appendBotMessage(`⚠️ تعذر الإرسال الفوري (${safeAIHtml(res ? res.reason : 'خطأ شبكة')})؛ تم حفظ التقرير في الطابور لإعادة المحاولة تلقائياً.`);
+    }
 }
 
 function flushEmailQueue() {
-    if (!navigator.onLine) return;
-    let cfg = JSON.parse(localStorage.getItem('seraj_ai_gmail_cfg') || '{}');
-    if (!cfg.webhookUrl) return;
-    let q = JSON.parse(localStorage.getItem('seraj_email_queue') || '[]');
-    if (q.length === 0) return;
-
-    localStorage.setItem('seraj_email_queue', '[]');
-    q.forEach(item => dispatchEmailWebhook(cfg.webhookUrl, item, false));
+    if (typeof DB !== 'undefined' && typeof DB.flushEmailQueue === 'function') {
+        DB.flushEmailQueue();
+    }
 }
 
 function checkAutoNightlyEmail() {
-    let cfg = JSON.parse(localStorage.getItem('seraj_ai_gmail_cfg') || '{}');
-    if (!cfg.autoDaily || !cfg.emailTo || !cfg.webhookUrl) return;
-    let now = new Date();
-    if (now.getHours() >= 22) {
-        let todayKey = (window.Utils && typeof window.Utils.getLocalDateString === 'function')
-            ? window.Utils.getLocalDateString(now)
-            : now.toLocaleDateString('en-CA');
-        if (localStorage.getItem('seraj_last_auto_email_date') !== todayKey) {
-            localStorage.setItem('seraj_last_auto_email_date', todayKey);
-            sendDailyReportToGmail(false);
-        }
+    if (typeof DB !== 'undefined' && typeof DB.checkAutoNightlyEmail === 'function') {
+        DB.checkAutoNightlyEmail();
     }
 }
 
@@ -2039,7 +1912,7 @@ function renderCustomRulesList() {
     }
     container.innerHTML = dict.map((r, i) => `
         <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-dark); padding:7px 10px; border-radius:8px; margin-bottom:6px; font-size:12px;">
-            <span><b>"${r.trigger}"</b> &larr; ${r.meaning}</span>
+            <span><b>"${safeAIHtml(r.trigger)}"</b> &larr; ${safeAIHtml(r.meaning)}</span>
             <button onclick="deleteCustomRule(${i})" style="background:none; border:none; color:var(--neon-red); cursor:pointer; font-weight:800;">حذف</button>
         </div>
     `).join('');
@@ -2064,7 +1937,7 @@ function appendBotMessage(htmlContent, spokenSummary = null) {
     row.className = 'msg-row bot';
     row.innerHTML = `
         <div class="msg-bubble">${htmlContent}</div>
-        <span class="msg-time">مساعد سراج • ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
+        <span class="msg-time">المساعد الذكي • ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
     `;
     chat.appendChild(row);
     chat.scrollTop = chat.scrollHeight;
@@ -2074,7 +1947,13 @@ function appendBotMessage(htmlContent, spokenSummary = null) {
     }
 }
 
-function openModal(id) { document.getElementById(id).classList.add('show'); }
+function openModal(id) {
+    if (id === 'gmailModal' && window.SerajAuth && !window.SerajAuth.canAccess('ai_financial_queries')) {
+        appendBotMessage('⛔ إعدادات تقارير الجيميل مخصصة لصاحب المحل (المالك) فقط.');
+        return;
+    }
+    document.getElementById(id).classList.add('show');
+}
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 </script>
 </body>

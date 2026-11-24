@@ -357,11 +357,11 @@
 
         <button type="button" class="sidebar-btn owner-only" data-role="owner" onclick="openStoreSettingsModal()">⚙️ إعدادات المتجر والذكاء</button>
         <button type="button" class="sidebar-btn" onclick="openPrinterSettingsModal()">🖨️ إعدادات الطابعة والفواتير</button>
-        <button type="button" class="sidebar-btn" onclick="openVoiceDictModal()">🎙️ قاموس الصوت والوحدات</button>
+        <button type="button" class="sidebar-btn owner-only" data-role="owner" onclick="openVoiceDictModal()">🎙️ قاموس الصوت والوحدات</button>
         <a href="ai_assistant.html" class="sidebar-btn btn-accent-nav">🧠 المساعد الذكي</a>
 
-        <button type="button" class="sidebar-btn btn-accent-green" onclick="handleBackupData()">💾 حفظ / مشاركة Data.json</button>
-        <button type="button" class="sidebar-btn" onclick="handleBackupImages()">🖼️ نسخ الصور Images.json (اختياري)</button>
+        <button type="button" class="sidebar-btn btn-accent-green owner-only" data-role="owner" onclick="handleBackupData()">💾 حفظ / مشاركة Data.json</button>
+        <button type="button" class="sidebar-btn owner-only" data-role="owner" onclick="handleBackupImages()">🖼️ نسخ الصور Images.json (اختياري)</button>
         <button type="button" class="sidebar-btn owner-only" data-role="owner" onclick="triggerRestoreInput()">📂 استرجاع نسخة (Data / Images)</button>
         <input type="file" id="restore-file-input" accept=".json" hidden onchange="handleRestoreFile(event)">
 
@@ -371,7 +371,6 @@
         <!-- أزرار الباقات السحابية (تُخفى تلقائياً في باقة offline_single) -->
         <button type="button" id="btn-cloud-sync-now" class="sidebar-btn btn-accent-nav cloud-only-btn" onclick="handleManualCloudSync()">⚡ مزامنة فورية الآن</button>
         <button type="button" id="btn-cloud-pull" class="sidebar-btn cloud-only-btn" onclick="handlePullFromCloud()">☁️ سحب ومطابقة بيانات المحل</button>
-        <button type="button" id="btn-cloud-archive" class="sidebar-btn btn-accent-danger owner-only cloud-only-btn" data-role="owner" onclick="triggerSystemArchive()">📦 الأرشفة السحابية (تفريغ مساحة)</button>
 
         <button type="button" id="btn-support-wa" class="sidebar-btn btn-accent-green" style="display: none;" onclick="openSupportWhatsApp()">📞 الدعم الفني</button>
         <button type="button" class="sidebar-btn btn-accent-danger" onclick="handleSignOut()">🚪 تسجيل الخروج</button>
@@ -391,7 +390,7 @@
                 <img src="store.jpg" alt="مخزن المنتجات">
                 <div class="title">مخزن المنتجات</div>
             </a>
-            <a href="purchases.html" class="grid-item">
+            <a href="purchases.html" class="grid-item owner-only" data-role="owner">
                 <img src="buy.jpg" alt="شراء">
                 <div class="title">شراء</div>
             </a>
@@ -427,7 +426,7 @@
             <div class="compact-row"><label>اسم المحل:</label><input type="text" id="set-store-name" placeholder="اسم المحل للفواتير"></div>
             <div class="compact-row"><label>رقم الهاتف:</label><input type="text" id="set-store-phone" placeholder="رقم هاتف المحل" dir="ltr"></div>
             <div class="compact-row"><label>العنوان:</label><input type="text" id="set-store-address" placeholder="عنوان المحل (اختياري)"></div>
-            <div class="compact-row"><label>اسم الجهاز:</label><input type="text" id="set-device-name" placeholder="مثال: المالك أو كاشير 1"></div>
+            <div class="compact-row multi-device-only" id="row-device-name"><label>اسم الجهاز:</label><input type="text" id="set-device-name" placeholder="مثال: المالك أو كاشير 1"></div>
             <div class="compact-row"><label>رابط Gemini:</label><input type="text" id="settings_gemini_link" placeholder="https://gemini.google.com/..." dir="ltr"></div>
             <div class="compact-row"><label>مفتاح AI:</label><input type="password" id="set-ai-key" placeholder="Gemini API Key" dir="ltr"></div>
             <div class="compact-btns">
@@ -560,6 +559,7 @@
 
             <!-- نموذج دخول السحابة عبر Firebase Authentication -->
             <div id="cloudLoginForm">
+                <p style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 0;">سجّل الدخول بحساب المالك أو الكاشير المعتمد؛ يتم تطبيق صلاحياتك تلقائياً.</p>
                 <div class="compact-row"><label>البريد:</label><input type="email" id="cloud-email-input" placeholder="owner@store.com" dir="ltr" autocomplete="username"></div>
                 <div class="compact-row"><label>كلمة المرور:</label><input type="password" id="cloud-pass-input" placeholder="••••••••" dir="ltr" autocomplete="current-password"></div>
                 <button type="button" id="btnCloudLoginSubmit" class="btn-save-ai" style="width: 100%; margin-top: 8px;" onclick="window.Utils.preventDoubleClick(this, loginCloudAccount)">تسجيل الدخول السحابي 🚀</button>
@@ -621,7 +621,9 @@
             const bRole = document.getElementById('badge-role-device');
             if (bRole) {
                 const roleLabel = sess.role === 'owner' ? 'المالك (صلاحية كاملة)' : 'كاشير';
-                bRole.textContent = `${roleLabel} — ${sess.deviceName || 'جهاز 1'}`;
+                bRole.textContent = window.SerajAuth.isOfflineSinglePlan()
+                    ? roleLabel
+                    : `${roleLabel} — ${sess.deviceName || 'جهاز 1'}`;
             }
 
             const bPlan = document.getElementById('badge-plan-name');
@@ -662,6 +664,9 @@
         // =========================================================================
         function openStoreSettingsModal() {
             closeSidebar();
+            if (!window.SerajAuth.canAccess('manage_store_settings')) {
+                return SerajAlert('⛔ إعدادات المتجر مخصصة لصاحب المحل (المالك) فقط.', 'error');
+            }
             const settings = DB.getStoreSettings();
             document.getElementById('set-store-name').value = settings.shopName || '';
             document.getElementById('set-store-phone').value = settings.shopPhone || '';
@@ -673,6 +678,9 @@
         }
 
         function saveStoreSettingsModal() {
+            if (!window.SerajAuth.canAccess('manage_store_settings')) {
+                return SerajAlert('⛔ إعدادات المتجر مخصصة لصاحب المحل (المالك) فقط.', 'error');
+            }
             const shopName = document.getElementById('set-store-name').value.trim();
             const shopPhone = document.getElementById('set-store-phone').value.trim();
             const shopAddress = document.getElementById('set-store-address').value.trim();
@@ -685,7 +693,7 @@
                 shopPhone: shopPhone,
                 shopAddress: shopAddress
             });
-            if (devName) localStorage.setItem('seraj_device_name', devName);
+            if (devName && !window.SerajAuth.isOfflineSinglePlan()) localStorage.setItem('seraj_device_name', devName);
             localStorage.setItem('seraj_gemini_link', geminiLink);
             localStorage.setItem('seraj_ai_key', aiKey);
 
@@ -740,6 +748,9 @@
         // =========================================================================
         function openVoiceDictModal() {
             closeSidebar();
+            if (!window.SerajAuth.canAccess('manage_voice_config')) {
+                return SerajAlert('⛔ إدارة قاموس الصوت والوحدات مخصصة لصاحب المحل (المالك) فقط.', 'error');
+            }
             renderVoiceDictUI();
             window.SerajUI.openModal('voiceDictModal');
         }
@@ -822,6 +833,9 @@
         // =========================================================================
         async function handleBackupData() {
             closeSidebar();
+            if (!window.SerajAuth.canAccess('export_backup')) {
+                return SerajAlert('⛔ تصدير النسخة الاحتياطية مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const ok = await DB.exportOfflineDataJSON(true);
             if (ok) {
                 SerajAlert('✅ تم تجهيز ومشاركة نسخة البيانات Data.json بنجاح!', 'success');
@@ -830,6 +844,9 @@
 
         async function handleBackupImages() {
             closeSidebar();
+            if (!window.SerajAuth.canAccess('export_backup')) {
+                return SerajAlert('⛔ تصدير نسخ الصور مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const ok = await DB.exportImagesBackupJSON(true);
             if (ok) {
                 SerajAlert('✅ تم تجهيز نسخة الصور المستقلة Images.json بنجاح!', 'success');
@@ -852,9 +869,16 @@
             reader.onload = async (e) => {
                 try {
                     await DB.restoreData(e.target.result, false);
+                } catch (err) {
+                    console.error('Restore File Error:', err);
+                    SerajAlert('❌ حدث خطأ أثناء استعادة الملف: ' + (err && err.message ? err.message : 'ملف غير صالح'), 'error');
                 } finally {
                     event.target.value = '';
                 }
+            };
+            reader.onerror = () => {
+                event.target.value = '';
+                SerajAlert('❌ تعذرت قراءة ملف النسخة الاحتياطية من الجهاز.', 'error');
             };
             reader.readAsText(file);
         }
@@ -908,11 +932,6 @@
         function handlePullFromCloud() {
             closeSidebar();
             DB.syncFromCloud();
-        }
-
-        function triggerSystemArchive() {
-            closeSidebar();
-            DB.archiveSmartData();
         }
 
         async function handleSignOut() {

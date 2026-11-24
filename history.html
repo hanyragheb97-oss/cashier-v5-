@@ -181,9 +181,9 @@
         <div onclick="printSingleInvoiceThermal()">🧾 طباعة حرارية (80mm)</div>
         <div onclick="printSingleInvoiceA4()">🖨️ طباعة ورقة (A4)</div>
         <div onclick="exportSingleInvoicePDF()">📄 مشاركة PDF</div>
-        <div id="editInvMenuOpt" onclick="window.Utils.preventDoubleClick(this, openFullEditScreen)">✏️ تعديل الفاتورة</div>
-        <div id="cancelInvMenuOpt" class="val-red" onclick="window.Utils.preventDoubleClick(this, cancelInvoiceFromMenu)">❌ إلغاء الفاتورة</div>
-        <div id="convertQuoteMenuOpt" class="val-green" onclick="window.Utils.preventDoubleClick(this, convertToSalesInvoice)">⚡ تحويل لفاتورة بيع</div>
+        <div id="editInvMenuOpt" class="owner-only" data-role="owner" onclick="window.Utils.preventDoubleClick(this, openFullEditScreen)">✏️ تعديل الفاتورة</div>
+        <div id="cancelInvMenuOpt" class="val-red owner-only" data-role="owner" onclick="window.Utils.preventDoubleClick(this, cancelInvoiceFromMenu)">❌ إلغاء الفاتورة</div>
+        <div id="convertQuoteMenuOpt" class="val-green owner-only" data-role="owner" onclick="window.Utils.preventDoubleClick(this, convertToSalesInvoice)">⚡ تحويل لفاتورة بيع</div>
     </div>
 
     <!-- نافذة تعديل الصنف -->
@@ -646,7 +646,7 @@
                             <div class="inv-info">
                                 <div class="inv-customer">${safeHTML(dispName)} <span style="font-size:13px;">(${badge})</span></div>
                                 <div class="inv-meta">فاتورة رقم: <span class="invoice-number">${safeHTML(invNoDisplay)}</span>${isDelayed ? ` | متبقي: <span class="val-red">${rem.toFixed(2)}</span>` : ''}</div>
-                                <div class="inv-meta">${safeHTML(inv.date || 'غير محدد')}${inv._device ? ` | 💻 ${safeHTML(inv._device)}` : ''}</div>
+                                <div class="inv-meta">${safeHTML(inv.date || 'غير محدد')}${(!window.SerajAuth || !window.SerajAuth.isOfflineSinglePlan()) && inv._device ? ` | 💻 ${safeHTML(inv._device)}` : ''}</div>
                             </div>
                             <div class="inv-amount ${amountClass}">${finalTotal.toFixed(2)}</div>
                         </div>
@@ -673,9 +673,11 @@
                         const cancelOpt = document.getElementById('cancelInvMenuOpt');
 
                         const isQuote = (inv.type === 'quotation' || inv.type === 'quote');
-                        if (convertOpt) convertOpt.style.display = isQuote ? 'block' : 'none';
-                        if (editOpt) editOpt.style.display = 'block';
-                        if (cancelOpt) cancelOpt.style.display = 'block';
+                        const canEditInv = !window.SerajAuth || window.SerajAuth.canAccess('edit_sales_invoice');
+                        const canCancelInv = !window.SerajAuth || window.SerajAuth.canAccess('cancel_sales_invoice');
+                        if (convertOpt) convertOpt.style.display = (isQuote && canEditInv) ? 'block' : 'none';
+                        if (editOpt) editOpt.style.display = canEditInv ? 'block' : 'none';
+                        if (cancelOpt) cancelOpt.style.display = canCancelInv ? 'block' : 'none';
 
                         menu.style.display = 'block';
                         const menuWidth = 220;
@@ -759,6 +761,9 @@
         async function cancelInvoiceFromMenu() {
             closeAllMenus();
             if (isReadOnlyMode) return;
+            if (window.SerajAuth && !window.SerajAuth.canAccess('cancel_sales_invoice')) {
+                return SerajAlert('⛔ إلغاء الفواتير مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
 
             const invIndex = invoicesDB.findIndex(i => i && String(i.id) === String(selectedInvoiceId));
             if (invIndex === -1) return;
@@ -801,6 +806,9 @@
         function convertToSalesInvoice() {
             closeAllMenus();
             if (isReadOnlyMode) return;
+            if (window.SerajAuth && !window.SerajAuth.canAccess('edit_sales_invoice')) {
+                return SerajAlert('⛔ تحويل عروض الأسعار مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const inv = invoicesDB.find(i => i && String(i.id) === String(selectedInvoiceId));
             if (!inv || (inv.type !== 'quotation' && inv.type !== 'quote')) return;
 
@@ -813,6 +821,9 @@
         function openFullEditScreen() {
             closeAllMenus();
             if (isReadOnlyMode) return;
+            if (window.SerajAuth && !window.SerajAuth.canAccess('edit_sales_invoice')) {
+                return SerajAlert('⛔ تعديل الفواتير مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const inv = invoicesDB.find(i => i && String(i.id) === String(selectedInvoiceId));
             if (!inv) return;
 
@@ -994,14 +1005,18 @@
             const slider = document.getElementById('editBatchesSlider');
             let totalStk = 0;
 
+            const canSeeBuy = !window.SerajAuth || window.SerajAuth.canAccess('view_purchase_prices');
             if (p && Array.isArray(p.lots) && p.lots.length > 0) {
                 slider.innerHTML = p.lots.map(b => {
                     const st = round4(b.stock);
                     totalStk = round4(totalStk + st);
+                    const priceRow = canSeeBuy
+                        ? `<div>شراء: <span class="val-red">${round2(b.purchasePrice).toFixed(2)}</span> | بيع: <span class="val-green">${round2(b.price).toFixed(2)}</span></div>`
+                        : `<div>بيع: <span class="val-green">${round2(b.price).toFixed(2)}</span></div>`;
                     return `
                         <div class="batch-card" style="background: var(--card-bg-alt); border: 1px solid var(--neon-border-soft); border-radius: 10px; padding: 8px; font-size: 13px; text-align: right;">
                             <div>المصدر: <strong>${safeHTML(b.supplier || b.source || '---')}</strong></div>
-                            <div>شراء: <span class="val-red">${round2(b.purchasePrice).toFixed(2)}</span> | بيع: <span class="val-green">${round2(b.price).toFixed(2)}</span></div>
+                            ${priceRow}
                             <div>تاريخ: ${safeHTML(b.date || '-')} | كمية: <span class="val-green">${st}</span></div>
                         </div>
                     `;
@@ -1261,6 +1276,9 @@
         }
 
         async function confirmFinalEdit() {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('edit_sales_invoice')) {
+                return SerajAlert('⛔ حفظ تعديلات الفواتير مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const dbIndex = invoicesDB.findIndex(i => i && String(i.id) === String(editingInvoiceData.id));
             if (dbIndex === -1) return;
 
@@ -1447,7 +1465,7 @@
 
             const notesHtml = inv.notes ? `<div class="inv-meta" style="margin-top:6px;">ملاحظات: ${safeHTML(inv.notes)}</div>` : '';
             let deviceHtml = '';
-            if (inv._device) {
+            if ((!window.SerajAuth || !window.SerajAuth.isOfflineSinglePlan()) && inv._device) {
                 const editTag = (inv._lastModifiedBy && inv._lastModifiedBy !== inv._device)
                     ? ` | ✏️ آخر تعديل: <b>${safeHTML(inv._lastModifiedBy)}</b>`
                     : '';
@@ -1694,6 +1712,9 @@
         async function initHistoryPage() {
             await window.SerajMegaDB.ready;
             DB.applySavedTheme();
+            if (window.SerajAuth && typeof window.SerajAuth.applyRoleGuards === 'function') {
+                window.SerajAuth.applyRoleGuards();
+            }
             updatePageBranding();
 
             const urlParams = new URLSearchParams(window.location.search);

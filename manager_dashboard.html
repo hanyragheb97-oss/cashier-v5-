@@ -663,6 +663,40 @@
         </div>
     </div>
 
+    <!-- نافذة إدارة مستخدمي المحل (المالك والكاشيرين + توليد أمر Custom Claims) -->
+    <div id="usersModal" class="modal-overlay" onclick="closeModal('usersModal')">
+        <div class="modal-card" style="max-width: 620px;" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="usersModalTitle">👥 مستخدمو المحل وصلاحيات RBAC</h3>
+                <button type="button" class="btn btn-muted" onclick="closeModal('usersModal')">✖ إغلاق</button>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 0; line-height: 1.6;">
+                سجّل هنا إيميلات المالك والكاشيرين التابعين للمحل كمرجع إداري، وانسخ أمر <code>setCustomUserClaims</code> لتنفيذه مباشرة في <strong>Google Cloud Shell</strong> (Firebase Admin SDK) لمنح الصلاحية الفعلية.
+            </p>
+            <div class="form-grid" style="margin-bottom: 14px;">
+                <div class="field-group">
+                    <label for="user-modal-email">إيميل المستخدم (Firebase Auth)</label>
+                    <input type="email" id="user-modal-email" placeholder="cashier1@shop.com" dir="ltr">
+                </div>
+                <div class="field-group">
+                    <label for="user-modal-name">الاسم / الوصف</label>
+                    <input type="text" id="user-modal-name" placeholder="مثال: كاشير الفترة المسائية">
+                </div>
+                <div class="field-group">
+                    <label for="user-modal-role">الدور (Role)</label>
+                    <select id="user-modal-role">
+                        <option value="cashier">كاشير (cashier)</option>
+                        <option value="owner">صاحب المحل (owner)</option>
+                    </select>
+                </div>
+                <div class="field-group">
+                    <button type="button" class="btn btn-primary" style="width: 100%; height: 42px;" onclick="addStoreUserRecord()">➕ تسجيل المستخدم</button>
+                </div>
+            </div>
+            <div id="usersModalBody"></div>
+        </div>
+    </div>
+
     <!-- نافذة التأكيد الصارم (كتابة كلمة "تأكيد") -->
     <div id="destructiveModal" class="modal-overlay" onclick="cancelDestructiveConfirm()">
         <div class="modal-card" style="max-width: 440px; border-color: var(--accent-red);" onclick="event.stopPropagation()">
@@ -1205,6 +1239,7 @@
                         <td>
                             <div class="actions-wrap">
                                 ${toggleBtn}
+                                <button type="button" class="btn btn-info" onclick="openUsersModal('${sid}')">👥 المستخدمين</button>
                                 <button type="button" class="btn btn-info" onclick="openDevicesModal('${sid}')">📱 الأجهزة</button>
                                 <button type="button" class="btn btn-purple" onclick="openBackupsModal('${sid}')">🔄 استعادة</button>
                                 <button type="button" class="btn btn-danger" onclick="wipeStoreDataSafe('${sid}')">🧹 تصفير الداتا</button>
@@ -1214,6 +1249,103 @@
                     </tr>
                 `;
             }).join('');
+        }
+
+        // =========================================================================
+        // 6.5 إدارة مستخدمي المحل (المالك / الكاشيرين) وتوليد أمر Custom Claims
+        // =========================================================================
+        let activeUsersModalStoreId = '';
+
+        function buildClaimsCliSnippet(email, storeId, role, plan) {
+            return `node -e "const admin=require('firebase-admin');admin.initializeApp();admin.auth().getUserByEmail('${email}').then(u=>admin.auth().setCustomUserClaims(u.uid,{storeId:'${storeId}',role:'${role}',plan:'${plan}'})).then(()=>{console.log('OK');process.exit(0);});"`;
+        }
+
+        async function openUsersModal(storeId) {
+            activeUsersModalStoreId = storeId;
+            document.getElementById('usersModalTitle').textContent = `👥 مستخدمو المحل — ${storeId}`;
+            document.getElementById('user-modal-email').value = '';
+            document.getElementById('user-modal-name').value = '';
+            document.getElementById('user-modal-role').value = 'cashier';
+            const body = document.getElementById('usersModalBody');
+            body.innerHTML = `<div style="text-align:center; padding:16px; color:var(--text-muted);">جاري قراءة سجل المستخدمين...</div>`;
+            openModal('usersModal');
+
+            try {
+                const snap = await dbAdmin.ref(`${DASHBOARD_BRAND.storesIndexRoot}/${storeId}/users`).once('value');
+                const usersMap = snap.exists() ? (snap.val() || {}) : {};
+                const storeMeta = cachedStoresMap[storeId] || {};
+                const plan = storeMeta.plan || 'pro';
+                const keys = Object.keys(usersMap);
+
+                if (keys.length === 0) {
+                    body.innerHTML = `<div style="text-align:center; padding:16px; color:var(--text-muted);">لا يوجد مستخدمون مسجلون في المرجع بعد. أضف إيميل المالك أو الكاشير بالأعلى.</div>`;
+                    return;
+                }
+
+                body.innerHTML = keys.map(uKey => {
+                    const u = usersMap[uKey] || {};
+                    const safeEmail = escapeHTML(u.email || '');
+                    const roleVal = u.role === 'owner' ? 'owner' : 'cashier';
+                    const roleBadge = roleVal === 'owner'
+                        ? `<span class="badge badge-active">المالك (owner)</span>`
+                        : `<span class="badge badge-plan-pro">كاشير (cashier)</span>`;
+                    return `
+                        <div class="modal-list-item">
+                            <div>
+                                <div><strong>${escapeHTML(u.name || 'مستخدم')}</strong> ${roleBadge}</div>
+                                <span class="cell-sub" dir="ltr">📧 ${safeEmail}</span>
+                            </div>
+                            <div class="actions-wrap">
+                                <button type="button" class="btn btn-info" onclick="copyUserClaimsCommand('${escapeHTML(storeId)}', '${safeEmail}', '${roleVal}', '${escapeHTML(plan)}')">📋 نسخ أمر Claims</button>
+                                <button type="button" class="btn btn-danger" onclick="deleteStoreUserRecord('${escapeHTML(storeId)}', '${escapeHTML(uKey)}')">🗑️ حذف</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                body.innerHTML = `<div style="color:var(--accent-red);">خطأ: ${escapeHTML(err.message)}</div>`;
+            }
+        }
+
+        function copyUserClaimsCommand(storeId, email, role, plan) {
+            const cmd = buildClaimsCliSnippet(email, storeId, role, plan);
+            copyText(cmd);
+        }
+
+        async function addStoreUserRecord() {
+            const storeId = activeUsersModalStoreId;
+            if (!storeId) return;
+            const email = (document.getElementById('user-modal-email').value || '').trim().toLowerCase();
+            const name = (document.getElementById('user-modal-name').value || '').trim();
+            const role = document.getElementById('user-modal-role').value === 'owner' ? 'owner' : 'cashier';
+
+            if (!email || !email.includes('@')) {
+                return showToast('يرجى إدخال بريد إلكتروني صحيح.', true);
+            }
+
+            const key = sanitizeKey(email);
+            try {
+                await dbAdmin.ref(`${DASHBOARD_BRAND.storesIndexRoot}/${storeId}/users/${key}`).set({
+                    email: email,
+                    name: name || (role === 'owner' ? 'المالك' : 'كاشير'),
+                    role: role,
+                    addedAt: getServerNow()
+                });
+                showToast(`✅ تم تسجيل المستخدم (${email}) بدور ${role}`);
+                openUsersModal(storeId);
+            } catch (err) {
+                showToast('❌ تعذر حفظ المستخدم: ' + err.message, true);
+            }
+        }
+
+        async function deleteStoreUserRecord(storeId, userKey) {
+            try {
+                await dbAdmin.ref(`${DASHBOARD_BRAND.storesIndexRoot}/${storeId}/users/${userKey}`).remove();
+                showToast('✅ تم حذف سجل المستخدم من المرجع (لا تنسَ تعطيل حسابه في Firebase Auth إن لزم).');
+                openUsersModal(storeId);
+            } catch (err) {
+                showToast('❌ خطأ: ' + err.message, true);
+            }
         }
 
         // =========================================================================
@@ -1277,7 +1409,6 @@
             const now = getServerNow();
             const wipePatch = {
                 vaults_v2: { main: 0, insta: 0, wallet: 0 },
-                archived_financial_summary: null,
                 'meta/system_epoch': now,
                 'meta/updated_at': now
             };
@@ -1376,8 +1507,6 @@
                 if (dataMap.seraj_invoice_counters || dataMap.invoice_counters) {
                     restorePatch.invoice_counters = dataMap.seraj_invoice_counters || dataMap.invoice_counters;
                 }
-                restorePatch.archived_financial_summary = dataMap.seraj_archived_financial_summary || dataMap.archived_financial_summary || null;
-
                 await dbAdmin.ref(`${DASHBOARD_BRAND.cloudRoot}/${storeId}`).update(restorePatch);
                 await dbAdmin.ref(`${DASHBOARD_BRAND.storesIndexRoot}/${storeId}`).update({ system_epoch: now, updated_at: now });
                 closeModal('backupsModal');

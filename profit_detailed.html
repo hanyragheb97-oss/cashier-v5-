@@ -75,7 +75,9 @@
                         <td colspan="3">
                             إجمالي أرباح الأصناف: <span id="grandGrossProfit" class="val-green" dir="ltr">0.00</span> ج<br>
                             إجمالي الخصومات: <span id="grandDiscounts" class="val-red" dir="ltr">0.00</span> ج<br>
-                            صافي الربح (قبل المصروفات): <span id="grandNetProfit" class="val-yellow" style="font-size: 19px;" dir="ltr">0.00</span> ج
+                            مجمل الربح (قبل المصروفات): <span id="grandNetProfit" class="val-green" dir="ltr">0.00</span> ج<br>
+                            إجمالي المصروفات: <span id="grandExpenses" class="val-red" dir="ltr">0.00</span> ج<br>
+                            صافي الربح النهائي: <span id="grandFinalNetProfit" class="val-yellow" style="font-size: 19px;" dir="ltr">0.00</span> ج
                         </td>
                     </tr>
                 </tfoot>
@@ -139,7 +141,7 @@
         let customDateFrom = null;
         let customDateTo = null;
         let lastComputedRows = [];
-        let lastTotals = { grossProfit: 0, discounts: 0, netProfit: 0 };
+        let lastTotals = { grossProfit: 0, discounts: 0, netProfit: 0, expenses: 0, finalNetProfit: 0 };
 
         const safeHTML = (v) => window.Utils.sanitizeHTML(v);
         const round2 = (v) => window.Utils.round2(v);
@@ -288,7 +290,8 @@
                 const isReturn = ['return', 'return_sale', 'sales_return'].includes(inv.type);
 
                 if (!normQ) {
-                    const disc = Math.max(0, round2(inv.discount));
+                    const invSub = (inv.items || []).reduce((s, it) => s + Math.abs(round2(it.total !== undefined ? it.total : (round4(it.qty ?? it.quantity ?? 0) * round2(it.price)))), 0);
+                    const disc = Math.min(Math.max(0, round2(inv.discount)), Math.max(0, round2(invSub)));
                     totalDiscounts = round2(totalDiscounts + (isReturn ? -disc : disc));
                 }
 
@@ -324,12 +327,19 @@
             lastComputedRows = rows;
             const tbody = document.getElementById('tableBody');
 
+            const periodExpenses = normQ ? 0 : round2((DB.getExpenses(false) || []).reduce((s, exp) => {
+                if (!exp || !checkDateFilter(exp.date || exp.timestamp)) return s;
+                return round2(s + round2(exp.amount));
+            }, 0));
+
             if (rows.length === 0) {
-                lastTotals = { grossProfit: 0, discounts: 0, netProfit: 0 };
+                lastTotals = { grossProfit: 0, discounts: 0, netProfit: 0, expenses: periodExpenses, finalNetProfit: round2(-periodExpenses) };
                 tbody.innerHTML = `<tr><td colspan="3" style="padding: 24px; color: var(--text-muted);">لا توجد أرباح أو مبيعات في هذه الفترة</td></tr>`;
                 document.getElementById('grandGrossProfit').textContent = '0.00';
                 document.getElementById('grandDiscounts').textContent = '0.00';
                 document.getElementById('grandNetProfit').textContent = '0.00';
+                document.getElementById('grandExpenses').textContent = periodExpenses.toFixed(2);
+                document.getElementById('grandFinalNetProfit').textContent = lastTotals.finalNetProfit.toFixed(2);
                 return;
             }
 
@@ -355,11 +365,14 @@
             }).join('');
 
             const netProfit = round2(grandGrossProfit - totalDiscounts);
-            lastTotals = { grossProfit: grandGrossProfit, discounts: totalDiscounts, netProfit };
+            const finalNetProfit = round2(netProfit - periodExpenses);
+            lastTotals = { grossProfit: grandGrossProfit, discounts: totalDiscounts, netProfit, expenses: periodExpenses, finalNetProfit };
 
             document.getElementById('grandGrossProfit').textContent = grandGrossProfit.toFixed(2);
             document.getElementById('grandDiscounts').textContent = totalDiscounts.toFixed(2);
             document.getElementById('grandNetProfit').textContent = netProfit.toFixed(2);
+            document.getElementById('grandExpenses').textContent = periodExpenses.toFixed(2);
+            document.getElementById('grandFinalNetProfit').textContent = finalNetProfit.toFixed(2);
         }
 
         // =========================================================================
@@ -475,7 +488,7 @@
 
         window.addEventListener('seraj:updated', (e) => {
             const col = e && e.detail ? e.detail.collection : null;
-            if (!col || ['all', 'sales_invoices', 'products', 'store_settings'].includes(col)) {
+            if (!col || ['all', 'sales_invoices', 'products', 'treasury_moves', 'store_settings'].includes(col)) {
                 updatePageBranding();
                 renderTable();
             }

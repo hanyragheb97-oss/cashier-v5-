@@ -415,8 +415,10 @@ const PrintManager = {
                 const curr = invoiceData.currentBalance !== undefined
                     ? (parseFloat(invoiceData.currentBalance) || 0)
                     : (norm.isReturn ? (prev + norm.remVal) : (prev - norm.remVal));
-                const prevText = prev < -0.009 ? `${money(Math.abs(prev))} (عليه)` : (prev > 0.009 ? `${money(prev)} (له)` : '0.00');
-                const currText = curr < -0.009 ? `${money(Math.abs(curr))} (عليه)` : (curr > 0.009 ? `${money(curr)} (له)` : '0.00');
+                const negLabel = norm.isPurchase ? '(له علينا)' : '(عليه)';
+                const posLabel = norm.isPurchase ? '(لنا عنده)' : '(له)';
+                const prevText = prev < -0.009 ? `${money(Math.abs(prev))} ${negLabel}` : (prev > 0.009 ? `${money(prev)} ${posLabel}` : '0.00');
+                const currText = curr < -0.009 ? `${money(Math.abs(curr))} ${negLabel}` : (curr > 0.009 ? `${money(curr)} ${posLabel}` : '0.00');
                 balanceHtml = `<div style="border:2px solid #000; padding:6px; margin-top:8px; text-align:right; font-size:15px; font-weight:bold;"><div>حساب سابق: ${safe(prevText)}</div><div>إجمالي الحساب: ${safe(currText)}</div></div>`;
                 plainLines.push(`حساب سابق: ${prevText}`, `إجمالي الحساب: ${currText}`);
             } else if (invoiceData.customerPreviousBalance !== undefined) {
@@ -593,7 +595,8 @@ const PrintManager = {
         const safe = this._safe.bind(this);
         const localDateStr = this._todayISO();
 
-        const tableRows = Array.from(document.querySelectorAll('#' + tableBodyId + ' tr'));
+        const effectiveTableBodyId = document.getElementById(tableBodyId) ? tableBodyId : (document.getElementById('tableBody') ? 'tableBody' : tableBodyId);
+        const tableRows = Array.from(document.querySelectorAll('#' + effectiveTableBodyId + ' tr'));
         const hasFourCols = tableRows.some(tr => tr.querySelectorAll('td').length === 4);
         let rowsHtml = '';
 
@@ -720,7 +723,8 @@ const PrintManager = {
 
             const brand = this.getShopBranding();
             const safeDuration = durationText || (document.getElementById('currentDurationLabelOutside')?.innerText || 'مدى العمل');
-            const safeTableBodyId = tableBodyId || 'statementTableBody';
+            const requestedTableBodyId = tableBodyId || 'statementTableBody';
+            const safeTableBodyId = document.getElementById(requestedTableBodyId) ? requestedTableBodyId : (document.getElementById('tableBody') ? 'tableBody' : requestedTableBodyId);
             const todayStr = this._todayISO();
 
             const tableRows = document.querySelectorAll('#' + safeTableBodyId + ' tr');

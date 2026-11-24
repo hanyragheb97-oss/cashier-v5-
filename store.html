@@ -63,7 +63,7 @@
                 <span class="text">BACK</span>
             </button>
 
-            <div style="position: relative;">
+            <div style="position: relative;" class="owner-only" data-role="owner">
                 <button type="button" class="capsule bottom-print-btn bottom-bar-print-btn" style="padding: 0 18px;" onclick="togglePrintMenu(event)">
                     🖨️ طباعة / تصدير ▼
                 </button>
@@ -90,7 +90,7 @@
             <div class="product-details-header">
                 <div class="prod-header-title-row">
                     <h2 id="detProductName">اسم المنتج</h2>
-                    <button type="button" class="prod-inline-edit-btn" onclick="openEditProductModal()">✏️ تعديل</button>
+                    <button type="button" class="prod-inline-edit-btn owner-only" data-role="owner" onclick="openEditProductModal()">✏️ تعديل</button>
                 </div>
 
                 <div class="prod-header-body-row">
@@ -99,7 +99,7 @@
                         <span id="detBarcodeText">الكود: ---</span>
                     </div>
                     <div class="prod-header-link-center" style="flex-direction: column; align-items: center; gap: 4px;">
-                        <button type="button" id="btn-link-parent" onclick="openAutoParentModal(event)">🔗 ربط صنف رئيسي</button>
+                        <button type="button" id="btn-link-parent" class="owner-only" data-role="owner" onclick="openAutoParentModal(event)">🔗 ربط صنف رئيسي</button>
                         <span id="currentParentDisplay" style="font-size: 12px; color: var(--accent-yellow); font-weight: bold; display: none;"></span>
                     </div>
                     <div style="display: flex; align-items: center; justify-content: center;">
@@ -113,7 +113,7 @@
                     <thead>
                         <tr>
                             <th>الدفعة والرصيد</th>
-                            <th>سعر الشراء</th>
+                            <th class="owner-only" data-role="owner">سعر الشراء</th>
                             <th>سعر البيع</th>
                         </tr>
                     </thead>
@@ -134,7 +134,7 @@
                     <span class="arrow">⬅</span>
                     <span class="text">BACK</span>
                 </button>
-                <div class="inv-segmented-actions">
+                <div class="inv-segmented-actions owner-only" data-role="owner">
                     <button type="button" id="btnDeleteProd" onclick="deleteCurrentProduct(this)">🗑️<br>حذف</button>
                     <button type="button" onclick="openAddLotModal()">➕<br>إضافة</button>
                     <button type="button" onclick="openUpdatePriceModal()">✏️<br>سعر</button>
@@ -144,7 +144,7 @@
     </div>
 
     <!-- زر إضافة صنف جديد العائم -->
-    <button type="button" class="seraj-btn-add-floating" id="floatingAddProdBtn" onclick="openAddProductModal()" title="إضافة صنف جديد">➕</button>
+    <button type="button" class="seraj-btn-add-floating owner-only" data-role="owner" id="floatingAddProdBtn" onclick="openAddProductModal()" title="إضافة صنف جديد">➕</button>
 
     <!-- ================= النوافذ المنبثقة (Modals) ================= -->
 
@@ -317,6 +317,21 @@
             <div class="compact-btns">
                 <button type="button" class="cancel-btn btn-close-ai" onclick="closeModalById('bulkUpdateModal')">إلغاء</button>
                 <button type="button" class="confirm-btn btn-save-ai" id="btnConfirmBulkUpdate" onclick="window.Utils.preventDoubleClick(this, applyBulkPriceUpdate)">تطبيق التعديل</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="deleteProductChoiceModal" onclick="closeModalById('deleteProductChoiceModal')">
+        <div class="compact-modal" onclick="event.stopPropagation()">
+            <div class="compact-header"><h3>🗑️ خيارات إزالة المنتج</h3></div>
+            <div id="deleteChoiceSummary" style="text-align: right; font-size: 14px; font-weight: bold; line-height: 1.7; background: var(--card-bg-alt); border: 1.5px solid var(--neon-border-soft); border-radius: 12px; padding: 12px; margin-bottom: 10px;"></div>
+            <div id="deleteChoiceWarning" style="display: none; text-align: right; font-size: 13px; font-weight: bold; line-height: 1.6; color: var(--accent-yellow); background: var(--bg-dark-solid); border: 1.5px dashed var(--accent-yellow); border-radius: 10px; padding: 10px; margin-bottom: 12px;"></div>
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px;">
+                <button type="button" id="btnConfirmArchiveProd" class="confirm-btn btn-save-ai" style="width: 100%;" onclick="window.Utils.preventDoubleClick(this, confirmArchiveProductChoice)">📦 أرشفة الصنف (آمن — يُمكن استعادته عند الشراء)</button>
+                <button type="button" id="btnConfirmHardDeleteProd" class="cancel-btn btn-close-ai owner-only" data-role="owner" style="width: 100%;" onclick="window.Utils.preventDoubleClick(this, confirmHardDeleteProductChoice)">🗑️ حذف نهائي (إزالة تامة مع تجميد تكاليف الفواتير)</button>
+            </div>
+            <div class="compact-btns" style="margin-top: 6px;">
+                <button type="button" class="details-toggle-btn" style="margin: 0;" onclick="closeModalById('deleteProductChoiceModal')">إلغاء والرجوع</button>
             </div>
         </div>
     </div>
@@ -647,7 +662,8 @@
 
             const addBtn = document.getElementById('floatingAddProdBtn');
             if (addBtn) {
-                addBtn.style.display = (viewId === 'inventory-list-view') ? 'flex' : 'none';
+                const canAddProd = !window.SerajAuth || window.SerajAuth.canAccess('add_product');
+                addBtn.style.display = (viewId === 'inventory-list-view' && canAddProd) ? 'flex' : 'none';
             }
 
             if (viewId === 'inventory-list-view') {
@@ -852,6 +868,9 @@
         }
 
         function openAddProductModal() {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('add_product')) {
+                return SerajAlert('⛔ إضافة الأصناف مخصصة لصاحب المحل (المالك) فقط.', 'error');
+            }
             document.getElementById('addProdName').value = '';
             document.getElementById('addProdCategory').value = '';
             document.getElementById('addProdBarcode').value = '';
@@ -866,6 +885,9 @@
         }
 
         async function confirmAddProduct() {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('add_product')) {
+                return SerajAlert('⛔ إضافة الأصناف مخصصة لصاحب المحل (المالك) فقط.', 'error');
+            }
             const allProductsDB = DB.getProducts(true) || [];
             const activeProducts = allProductsDB.filter(p => p && !p.isDeleted && !p.isArchived);
 
@@ -1013,6 +1035,9 @@
 
         function openAutoParentModal(e) {
             if (e) { e.preventDefault(); e.stopPropagation(); }
+            if (window.SerajAuth && !window.SerajAuth.canAccess('edit_product')) {
+                return SerajAlert('⛔ ربط الأصناف مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const p = productsDB.find(x => x && String(x.id) === String(currentActiveProductId));
             if (!p) return;
 
@@ -1063,6 +1088,9 @@
         }
 
         function saveAutoParentLink() {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('edit_product')) {
+                return SerajAlert('⛔ ربط الأصناف مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             safeLoadProducts();
             const p = productsDB.find(x => x && String(x.id) === String(currentActiveProductId));
             if (!p) return;
@@ -1098,6 +1126,9 @@
             }
 
             const tbody = document.getElementById('detScrollableRows');
+            const canSeeBuy = !window.SerajAuth || window.SerajAuth.canAccess('view_purchase_prices');
+            const canEditLots = !window.SerajAuth || window.SerajAuth.canAccess('edit_product_lots');
+            const isOfflineSingle = window.SerajAuth && window.SerajAuth.isOfflineSinglePlan();
             let totalStockSum = 0;
 
             tbody.innerHTML = (p.lots || []).map((lot, index) => {
@@ -1106,21 +1137,22 @@
                 const isLocked = String(lot.supplier || '').includes('فاتورة شراء') || lot.source === 'purchase_invoice';
 
                 let devHtml = '';
-                if (lot._device) {
+                if (!isOfflineSingle && lot._device) {
                     const editTag = (lot._lastModifiedBy && lot._lastModifiedBy !== lot._device)
                         ? ` | ✏️ ${safeHTML(lot._lastModifiedBy)}`
                         : '';
                     devHtml = `<br><small class="color-device">💻 ${safeHTML(lot._device)}${editTag}</small>`;
                 }
 
+                const clickAttr = canEditLots ? `onclick="openEditLotModal(${index})" style="cursor: pointer;"` : '';
                 return `
-                    <tr onclick="openEditLotModal(${index})" style="cursor: pointer;">
+                    <tr ${clickAttr}>
                         <td>
                             <span class="stock-badge ${lotStock < -0.0001 ? 'val-red' : ''}" dir="ltr">${lotStock.toFixed(2)}</span><br>
                             <small style="color: var(--text-muted);">${isLocked ? '🔒 ' : ''}${safeHTML(lot.supplier || lot.source || 'رصيد')} (${safeHTML(lot.date || '')})</small>
                             ${devHtml}
                         </td>
-                        <td dir="ltr">${round2(lot.purchasePrice).toFixed(2)}</td>
+                        ${canSeeBuy ? `<td dir="ltr">${round2(lot.purchasePrice).toFixed(2)}</td>` : ''}
                         <td class="val-green" dir="ltr">${round2(lot.price).toFixed(2)}</td>
                     </tr>
                 `;
@@ -1132,6 +1164,9 @@
         }
 
         function openEditLotModal(index) {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('edit_product_lots')) {
+                return SerajAlert('⛔ تعديل دفعات المخزن مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const p = productsDB.find(x => x && String(x.id) === String(currentActiveProductId));
             if (!p || !p.lots || !p.lots[index]) return;
             const lot = p.lots[index];
@@ -1151,6 +1186,9 @@
         }
 
         async function saveEditedLot() {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('edit_product_lots')) {
+                return SerajAlert('⛔ تعديل دفعات المخزن مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             safeLoadProducts();
             const index = parseInt(document.getElementById('editLotIndex').value, 10);
             const p = productsDB.find(x => x && String(x.id) === String(currentActiveProductId));
@@ -1208,6 +1246,9 @@
         }
 
         function openEditProductModal() {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('edit_product')) {
+                return SerajAlert('⛔ تعديل بيانات المنتج مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const p = productsDB.find(x => x && String(x.id) === String(currentActiveProductId));
             if (!p) return;
             document.getElementById('editProdName').value = p.name;
@@ -1225,6 +1266,9 @@
         }
 
         async function confirmEditProduct() {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('edit_product')) {
+                return SerajAlert('⛔ تعديل بيانات المنتج مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             safeLoadProducts();
             const p = productsDB.find(x => x && String(x.id) === String(currentActiveProductId));
             if (!p) return;
@@ -1272,6 +1316,9 @@
         }
 
         function openAddLotModal() {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('edit_product_lots')) {
+                return SerajAlert('⛔ إضافة دفعات جردية مخصصة لصاحب المحل (المالك) فقط.', 'error');
+            }
             const p = productsDB.find(x => x && String(x.id) === String(currentActiveProductId));
             if (!p) return;
             document.getElementById('lotSupplier').value = '';
@@ -1282,6 +1329,9 @@
         }
 
         async function confirmAddLot() {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('edit_product_lots')) {
+                return SerajAlert('⛔ إضافة دفعات جردية مخصصة لصاحب المحل (المالك) فقط.', 'error');
+            }
             safeLoadProducts();
             const p = productsDB.find(x => x && String(x.id) === String(currentActiveProductId));
             if (!p) return;
@@ -1343,6 +1393,9 @@
         }
 
         function openUpdatePriceModal() {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('update_product_price')) {
+                return SerajAlert('⛔ تعديل الأسعار مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const p = productsDB.find(x => x && String(x.id) === String(currentActiveProductId));
             if (!p) return;
             document.getElementById('newUnifiedPriceInput').value = getProductPrice(p);
@@ -1350,6 +1403,9 @@
         }
 
         async function confirmUpdatePrice() {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('update_product_price')) {
+                return SerajAlert('⛔ تعديل الأسعار مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const val = round2(document.getElementById('newUnifiedPriceInput').value);
             if (isNaN(val) || val < 0) return SerajAlert('برجاء إدخال سعر بيع صحيح غير سالب!', 'error');
 
@@ -1390,6 +1446,9 @@
         }
 
         async function deleteCurrentProduct(btn) {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('delete_product')) {
+                return SerajAlert('⛔ حذف الأصناف مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             window.Utils.preventDoubleClick(btn, async () => {
                 safeLoadProducts();
                 const p = productsDB.find(x => x && String(x.id) === String(currentActiveProductId));
@@ -1519,6 +1578,9 @@
 
         function printFullInventory() {
             closeAllMenus();
+            if (window.SerajAuth && !window.SerajAuth.canAccess('view_inventory_cost')) {
+                return SerajAlert('⛔ طباعة جرد التكلفة مخصصة لصاحب المحل (المالك) فقط.', 'error');
+            }
             const reportHtml = buildFullInventoryReportHTML();
             if (!reportHtml) return SerajAlert('لا توجد منتجات للطباعة!', 'error');
             window.PrintManager.printA4HTML(reportHtml, 'جرد المخزن');
@@ -1526,6 +1588,9 @@
 
         function exportInventoryPDF() {
             closeAllMenus();
+            if (window.SerajAuth && !window.SerajAuth.canAccess('view_inventory_cost')) {
+                return SerajAlert('⛔ تصدير جرد التكلفة مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const reportHtml = buildFullInventoryReportHTML();
             if (!reportHtml) return SerajAlert('لا توجد منتجات للتصدير!', 'error');
             window.Utils.downloadRealPDF(reportHtml, `جرد_المخزن_${getTodayLocalStr()}.pdf`);
@@ -1533,6 +1598,9 @@
 
         function exportInventoryExcel() {
             closeAllMenus();
+            if (window.SerajAuth && !window.SerajAuth.canAccess('import_export_excel')) {
+                return SerajAlert('⛔ تصدير بيانات المخزن مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             safeLoadProducts();
             const activeProducts = productsDB.filter(p => p && !p.isDeleted && !p.isArchived);
             if (activeProducts.length === 0) return SerajAlert('لا توجد منتجات لتصديرها!', 'error');
@@ -1551,6 +1619,9 @@
 
         function triggerExcelImport() {
             closeAllMenus();
+            if (window.SerajAuth && !window.SerajAuth.canAccess('import_export_excel')) {
+                return SerajAlert('⛔ استيراد الإكسيل مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const input = document.getElementById('excelFileInput');
             input.value = '';
             input.click();
@@ -1558,6 +1629,9 @@
 
         // استيراد الإكسيل: السماح بالرصيد السالب + حفظ الباركود كـ String + تعقيم الأسماء
         function handleExcelImport(e) {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('import_export_excel')) {
+                return SerajAlert('⛔ استيراد الإكسيل مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const file = e.target.files[0];
             if (!file) return;
             if (typeof XLSX === 'undefined') {
@@ -1685,7 +1759,7 @@
         // التعديل الشامل للأسعار (مع احترام قفل سعر الشراء)
         // =========================================================================
         function openBulkUpdateModal() {
-            if (!window.SerajAuth.isOwner()) {
+            if (!window.SerajAuth.isOwner() || !window.SerajAuth.canAccess('bulk_price_update')) {
                 return SerajAlert('⛔ التعديل الشامل للأسعار مخصص لصاحب المحل (المالك) فقط.', 'error');
             }
             safeLoadProducts();
@@ -1834,6 +1908,7 @@
             });
 
             setTimeout(() => {
+                try {
                 _releaseBarcodeCameraOnly();
                 html5QrCode = new Html5Qrcode('reader');
                 html5QrCode.start(
@@ -1854,6 +1929,11 @@
                     SerajAlert('يرجى التأكد من إعطاء صلاحية الكاميرا للمتصفح.', 'error');
                     window.SerajUI.closeModal('scannerModal');
                 });
+                } catch (qrErr) {
+                    console.error('Barcode Init Error:', qrErr);
+                    SerajAlert('تعذر تشغيل الكاميرا لقراءة الباركود.', 'error');
+                    window.SerajUI.closeModal('scannerModal');
+                }
             }, 120);
         }
 

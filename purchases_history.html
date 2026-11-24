@@ -164,8 +164,8 @@
         <div onclick="printSingleInvoiceThermal()">🧾 طباعة حرارية (80mm)</div>
         <div onclick="printSingleInvoiceA4()">🖨️ طباعة ورقة (A4)</div>
         <div onclick="exportSingleInvoicePDF()">📄 مشاركة PDF</div>
-        <div id="editInvMenuOpt" onclick="window.Utils.preventDoubleClick(this, openFullEditScreen)">✏️ تعديل الفاتورة</div>
-        <div id="cancelInvMenuOpt" class="val-red" onclick="window.Utils.preventDoubleClick(this, cancelPurchaseInvoice)">❌ إلغاء الفاتورة</div>
+        <div id="editInvMenuOpt" class="owner-only" data-role="owner" onclick="window.Utils.preventDoubleClick(this, openFullEditScreen)">✏️ تعديل الفاتورة</div>
+        <div id="cancelInvMenuOpt" class="val-red owner-only" data-role="owner" onclick="window.Utils.preventDoubleClick(this, cancelPurchaseInvoice)">❌ إلغاء الفاتورة</div>
     </div>
 
     <!-- نافذة تعديل صنف مع تفاصيل المخزن -->
@@ -618,7 +618,7 @@
                             <div class="inv-info">
                                 <div class="inv-customer inv-supplier">${safeHTML(dispName)}</div>
                                 <div class="inv-meta">فاتورة شراء رقم: <span class="invoice-number">${safeHTML(invNoDisplay)}</span>${rem > 0.009 ? ` | متبقي له: <span class="val-green">${rem.toFixed(2)}</span>` : ''}</div>
-                                <div class="inv-meta">${safeHTML(inv.date || 'غير محدد')}${inv._device ? ` | 💻 ${safeHTML(inv._device)}` : ''}</div>
+                                <div class="inv-meta">${safeHTML(inv.date || 'غير محدد')}${(!window.SerajAuth || !window.SerajAuth.isOfflineSinglePlan()) && inv._device ? ` | 💻 ${safeHTML(inv._device)}` : ''}</div>
                             </div>
                             <div class="inv-amount val-red">${netTotal.toFixed(2)}</div>
                         </div>
@@ -674,18 +674,21 @@
         // =========================================================================
         // سحب دفعات فاتورة الشراء بذكاء (مطابقة invoiceId أولاً ثم LIFO) + normalizeProductLots
         // =========================================================================
-        function deductPurchaseLotSmart(p, qtyToRemove, invoiceId) {
+        function deductPurchaseLotSmart(p, qtyToRemove, invoiceId, invoiceNo = '') {
             let rem = round4(qtyToRemove);
             if (!p || rem <= 0.0001) return;
 
             DB.normalizeProductLots(p);
             const invIdStr = String(invoiceId ?? '');
+            const invNoStr = String(invoiceNo || invIdStr);
 
-            // 1. السحب من الدفعة المطابقة لـ invoiceId أولاً
+            // 1. السحب من الدفعة المطابقة لـ invoiceId أو invoiceNo أولاً
             for (let i = p.lots.length - 1; i >= 0 && rem > 0.0001; i--) {
                 const l = p.lots[i];
-                const isSameInv = (l.invoiceId !== undefined && String(l.invoiceId) === invIdStr) ||
-                    (invIdStr !== '' && String(l.supplier || '').includes('فاتورة شراء رقم ' + invIdStr));
+                const supStr = String(l.supplier || '');
+                const isSameInv = (l.invoiceId !== undefined && (String(l.invoiceId) === invIdStr || String(l.invoiceId) === invNoStr)) ||
+                    (invIdStr !== '' && supStr.includes('فاتورة شراء رقم ' + invIdStr)) ||
+                    (invNoStr !== '' && supStr.includes('فاتورة شراء رقم ' + invNoStr));
                 if (isSameInv) {
                     const lotStock = round4(l.stock);
                     if (lotStock > 0.0001) {
@@ -756,6 +759,9 @@
         async function cancelPurchaseInvoice() {
             closeAllMenus();
             if (isReadOnlyMode) return;
+            if (window.SerajAuth && !window.SerajAuth.canAccess('cancel_purchase_invoice')) {
+                return SerajAlert('⛔ إلغاء فواتير المشتريات مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
 
             const freshProductsDB = DB.getProducts(true) || [];
             const freshPurchaseInvoicesDB = DB.getPurchaseInvoices(true) || [];
@@ -775,7 +781,7 @@
                 const p = freshProductsDB.find(x => x && String(x.id) === String(item.id));
                 if (!p) return;
                 const qty = round4(item.qty);
-                deductPurchaseLotSmart(p, qty, inv.id);
+                deductPurchaseLotSmart(p, qty, inv.id, inv.invoiceNo);
                 p._lastModified = nowTs;
                 if (typeof DB.syncProductStockTransaction === 'function' && window.Utils.isNonZeroStock(qty)) {
                     DB.syncProductStockTransaction(p.id, -qty);
@@ -797,6 +803,9 @@
         function openFullEditScreen() {
             closeAllMenus();
             if (isReadOnlyMode) return;
+            if (window.SerajAuth && !window.SerajAuth.canAccess('edit_purchase_invoice')) {
+                return SerajAlert('⛔ تعديل فواتير المشتريات مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const inv = purchaseInvoicesDB.find(i => i && String(i.id) === String(selectedInvoiceId));
             if (!inv) return;
 
@@ -1398,6 +1407,9 @@
 
         // حفظ التعديل النهائي مع تمرير null لـ savePurchaseInvoices لحماية نواقص المفكرة الحالية
         async function confirmFinalEdit() {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('edit_purchase_invoice')) {
+                return SerajAlert('⛔ حفظ تعديلات فواتير المشتريات مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const freshProductsDB = DB.getProducts(true) || [];
             const freshPurchaseInvoicesDB = DB.getPurchaseInvoices(true) || [];
             const dbIndex = freshPurchaseInvoicesDB.findIndex(i => i && String(i.id) === String(editingInvoiceData.id));
@@ -1477,14 +1489,60 @@
             const lotLabel = `فاتورة شراء رقم ${invDisplayNo} - المورد: ${finalSupDisplay || 'نقدي'}`;
             const alignedTs = window.Utils.alignTimestampWithDate(finalDate, oldInv.timestamp);
 
-            if (itemsChanged) {
+            const qtySignature = (arr) => JSON.stringify((arr || []).map(it => ({ id: String(it.id ?? ''), qty: round4(it.qty) })).sort((a, b) => a.id.localeCompare(b.id)));
+            const onlyPricesChanged = itemsChanged && (qtySignature(safeOldItems) === qtySignature(editingInvoiceData.items));
+
+            if (onlyPricesChanged) {
+                const invIdStr = String(editingInvoiceData.id);
+                const invNoStr = String(invDisplayNo);
+                editingInvoiceData.items.forEach(newItem => {
+                    const p = freshProductsDB.find(x => x && String(x.id) === String(newItem.id));
+                    if (!p) return;
+                    DB.normalizeProductLots(p);
+                    const buyP = getSafePurchasePrice(newItem);
+                    const sellP = round2(newItem.sellPrice ?? newItem.price);
+                    if (sellP > 0) {
+                        p.lots.forEach(lot => { lot.price = sellP; lot.sellPrice = sellP; });
+                        p.price = sellP;
+                        p.sellPrice = sellP;
+                        p._lastValidPrice = sellP;
+                    }
+                    let matchedLot = null;
+                    for (let i = p.lots.length - 1; i >= 0; i--) {
+                        const l = p.lots[i];
+                        const supStr = String(l.supplier || '');
+                        if ((l.invoiceId !== undefined && (String(l.invoiceId) === invIdStr || String(l.invoiceId) === invNoStr)) || supStr.includes(invNoStr) || supStr.includes(invIdStr)) {
+                            matchedLot = l;
+                            break;
+                        }
+                    }
+                    if (matchedLot) {
+                        matchedLot.purchasePrice = buyP;
+                        matchedLot.buyPrice = buyP;
+                        matchedLot.supplier = lotLabel;
+                        matchedLot.date = finalDate;
+                        matchedLot.source = 'purchase_invoice';
+                        matchedLot.invoiceId = editingInvoiceData.id;
+                        matchedLot._lastModifiedBy = dName;
+                    }
+                    if (buyP > 0 && (!matchedLot || matchedLot === p.lots[p.lots.length - 1])) {
+                        p.purchasePrice = buyP;
+                        p.buyPrice = buyP;
+                        p._lastValidPurchase = buyP;
+                    }
+                    DB.normalizeProductLots(p);
+                    p._lastModified = nowTs;
+                    p._lastModifiedBy = dName;
+                });
+                DB.saveProducts(freshProductsDB);
+            } else if (itemsChanged) {
                 const stockDeltaMap = new Map();
 
                 safeOldItems.forEach(oldItem => {
                     const p = freshProductsDB.find(x => x && String(x.id) === String(oldItem.id));
                     if (!p) return;
                     const q = round4(oldItem.qty);
-                    deductPurchaseLotSmart(p, q, oldInv.id);
+                    deductPurchaseLotSmart(p, q, oldInv.id, oldInv.invoiceNo);
                     p._lastModified = nowTs;
                     stockDeltaMap.set(String(p.id), round4((stockDeltaMap.get(String(p.id)) || 0) - q));
                 });
@@ -1578,6 +1636,7 @@
                             if (matchById || matchByMeta) {
                                 l.supplier = lotLabel;
                                 l.date = finalDate;
+                                l.source = 'purchase_invoice';
                                 l.invoiceId = editingInvoiceData.id;
                                 l._lastModifiedBy = dName;
                                 p._lastModified = nowTs;
@@ -1662,7 +1721,7 @@
 
             const notesHtml = inv.notes ? `<div class="inv-meta" style="margin-top:6px;">ملاحظات: ${safeHTML(inv.notes)}</div>` : '';
             let deviceHtml = '';
-            if (inv._device) {
+            if ((!window.SerajAuth || !window.SerajAuth.isOfflineSinglePlan()) && inv._device) {
                 const editTag = (inv._lastModifiedBy && inv._lastModifiedBy !== inv._device)
                     ? ` | ✏️ آخر تعديل: <b>${safeHTML(inv._lastModifiedBy)}</b>`
                     : '';
@@ -1910,6 +1969,9 @@
         async function initPurchasesHistoryPage() {
             await window.SerajMegaDB.ready;
             DB.applySavedTheme();
+            if (window.SerajAuth && typeof window.SerajAuth.applyRoleGuards === 'function') {
+                window.SerajAuth.applyRoleGuards();
+            }
             DB.setActiveVoiceProfile('purchases');
             updatePageBranding();
 

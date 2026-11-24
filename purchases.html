@@ -404,6 +404,7 @@
         async function initPurchasesPage() {
             await window.SerajMegaDB.ready;
             DB.applySavedTheme();
+            if (window.SerajAuth && (!window.SerajAuth.applyRoleGuards() || !window.SerajAuth.canAccess('create_purchase'))) return;
             DB.setActiveVoiceProfile('purchases');
             updatePageBranding();
             loadDB();
@@ -1107,6 +1108,9 @@
         }
 
         async function confirmPurchaseSave() {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('create_purchase')) {
+                return SerajAlert('⛔ تسجيل فواتير المشتريات مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             if (_isConfirmingPurchaseSave) return;
             if (!invoice || invoice.length === 0) {
                 closeModals();
@@ -1544,6 +1548,7 @@
             });
 
             setTimeout(() => {
+                try {
                 _releaseBarcodeCameraOnly();
                 html5QrCode = new Html5Qrcode('reader');
                 html5QrCode.start(
@@ -1582,6 +1587,11 @@
                     SerajAlert('يرجى التأكد من إعطاء صلاحية الكاميرا للمتصفح.', 'error');
                     window.SerajUI.closeModal('scannerModal');
                 });
+                } catch (qrErr) {
+                    console.error('Barcode Init Error:', qrErr);
+                    SerajAlert('تعذر تشغيل الكاميرا لقراءة الباركود.', 'error');
+                    window.SerajUI.closeModal('scannerModal');
+                }
             }, 120);
         }
 

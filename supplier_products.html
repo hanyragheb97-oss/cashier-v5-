@@ -109,8 +109,10 @@
                     <tbody id="tableBody"></tbody>
                     <tfoot>
                         <tr class="report-total-footer">
-                            <td colspan="3">
-                                إجمالي مشترياتك من المورد = <span id="grandPurchasesTotal" class="color-supplier" dir="ltr">0.00</span> ج
+                            <td colspan="3" style="line-height: 1.8;">
+                                إجمالي الأصناف: <span id="grandPurchasesTotal" class="color-supplier" dir="ltr">0.00</span> ج<br>
+                                إجمالي الخصومات: <span id="grandSuppDiscounts" class="val-red" dir="ltr">0.00</span> ج<br>
+                                صافي المشتريات من المورد: <span id="grandSuppNet" class="val-yellow" style="font-size: 18px;" dir="ltr">0.00</span> ج
                             </td>
                         </tr>
                     </tfoot>
@@ -178,6 +180,8 @@
         let customDateTo = null;
         let lastProductList = [];
         let lastGrandPurchasesTotal = 0;
+        let lastSuppDiscounts = 0;
+        let lastSuppNetTotal = 0;
 
         const safeHTML = (v) => window.Utils.sanitizeHTML(v);
         const round2 = (v) => window.Utils.round2(v);
@@ -375,6 +379,7 @@
             const allPurchases = DB.getPurchaseInvoices(false) || [];
 
             const productsMap = {};
+            let totalSuppDiscounts = 0;
 
             allPurchases.forEach(inv => {
                 if (!inv || inv.type === 'quotation' || inv.type === 'quote') return;
@@ -387,6 +392,11 @@
                 if (!checkDateFilter(inv.date || inv.timestamp)) return;
 
                 const isReturn = ['return', 'return_purchase', 'purchase_return'].includes(inv.type);
+                if (!normProdQ) {
+                    const invSub = (inv.items || []).reduce((s, it) => s + Math.abs(round2(it.total !== undefined ? it.total : (round4(it.qty ?? it.quantity ?? 0) * round2(it.purchasePrice ?? it.buyPrice ?? it.price ?? 0)))), 0);
+                    const disc = Math.min(Math.max(0, round2(inv.discount)), Math.max(0, round2(invSub)));
+                    totalSuppDiscounts = round2(totalSuppDiscounts + (isReturn ? -disc : disc));
+                }
 
                 (inv.items || []).forEach(item => {
                     if (!item) return;
@@ -418,8 +428,12 @@
 
             if (productList.length === 0) {
                 lastGrandPurchasesTotal = 0;
+                lastSuppDiscounts = 0;
+                lastSuppNetTotal = 0;
                 tbody.innerHTML = `<tr><td colspan="3" style="padding: 24px; color: var(--text-muted);">لم تقم بشراء منتجات من هذا المورد في هذه الفترة</td></tr>`;
                 document.getElementById('grandPurchasesTotal').textContent = '0.00';
+                document.getElementById('grandSuppDiscounts').textContent = '0.00';
+                document.getElementById('grandSuppNet').textContent = '0.00';
                 return;
             }
 
@@ -440,9 +454,13 @@
             }).join('');
 
             lastGrandPurchasesTotal = grandPurchasesTotal;
+            lastSuppDiscounts = totalSuppDiscounts;
+            lastSuppNetTotal = round2(grandPurchasesTotal - totalSuppDiscounts);
             const totalEl = document.getElementById('grandPurchasesTotal');
             totalEl.textContent = grandPurchasesTotal.toFixed(2);
             totalEl.className = grandPurchasesTotal < 0 ? 'val-red' : 'color-supplier';
+            document.getElementById('grandSuppDiscounts').textContent = totalSuppDiscounts.toFixed(2);
+            document.getElementById('grandSuppNet').textContent = lastSuppNetTotal.toFixed(2);
         }
 
         // =========================================================================

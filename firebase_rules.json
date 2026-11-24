@@ -16,7 +16,7 @@
       ".write": "auth != null && (auth.token.admin === true || auth.token.role === 'admin' || auth.token.role === 'super_admin')",
       "$code": {
         ".read": true,
-        ".write": "(auth != null && (auth.token.admin === true || auth.token.role === 'admin' || auth.token.role === 'super_admin')) || (data.exists() && newData.exists() && data.child('plan').val() === 'offline_single' && newData.child('plan').val() === 'offline_single' && newData.child('code').val() === data.child('code').val() && newData.child('isUsed').val() === true && (data.child('isUsed').val() !== true || data.child('boundDeviceId').val() === newData.child('boundDeviceId').val()) && newData.child('boundDeviceId').isString() && newData.child('boundDeviceId').val().length >= 5 && newData.child('boundStoreId').isString() && newData.child('boundStoreId').val().length >= 1 && newData.child('boundStoreId').val() !== 'DemoStore' && newData.child('boundStoreId').val() !== 'demostore')"
+        ".write": "(auth != null && (auth.token.admin === true || auth.token.role === 'admin' || auth.token.role === 'super_admin')) || (data.exists() && newData.exists() && data.child('isUsed').val() !== true && data.child('plan').val() === 'offline_single' && newData.child('plan').val() === 'offline_single' && newData.child('code').val() === data.child('code').val() && newData.child('label').val() === data.child('label').val() && newData.child('createdAt').val() === data.child('createdAt').val() && newData.child('isUsed').val() === true && newData.child('usedAt').isNumber() && newData.child('boundDeviceId').isString() && newData.child('boundDeviceId').val().length >= 8 && newData.child('boundStoreId').isString() && newData.child('boundStoreId').val().length >= 2 && newData.child('boundStoreId').val() !== 'DemoStore' && newData.child('boundStoreId').val() !== 'demostore')"
       }
     },
 
@@ -24,10 +24,10 @@
       ".read": "auth != null && (auth.token.admin === true || auth.token.role === 'admin' || auth.token.role === 'super_admin')",
       ".write": "auth != null && (auth.token.admin === true || auth.token.role === 'admin' || auth.token.role === 'super_admin')",
       "$storeId": {
-        ".read": "auth != null && (auth.token.admin === true || auth.token.role === 'admin' || auth.token.role === 'super_admin' || (auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && (auth.token.role === 'owner' || auth.token.role === 'cashier') && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now))",
+        ".read": "auth != null && (auth.token.admin === true || auth.token.role === 'admin' || auth.token.role === 'super_admin' || (auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'owner' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now))",
         "snapshots": {
           "$snapshotDate": {
-            ".write": "(auth != null && (auth.token.admin === true || auth.token.role === 'admin' || auth.token.role === 'super_admin')) || (auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now && (auth.token.role === 'owner' || (auth.token.role === 'cashier' && !data.exists() && newData.exists())))",
+            ".write": "(auth != null && (auth.token.admin === true || auth.token.role === 'admin' || auth.token.role === 'super_admin')) || (auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'owner' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now)",
             ".validate": "!newData.exists() || ($snapshotDate.matches(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) && newData.hasChildren(['format', 'exportedAt', 'data']))"
           }
         }
@@ -62,7 +62,7 @@
           ".indexOn": ["_lastModified"],
           ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'owner' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now",
           "$itemId": {
-            ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'cashier' && newData.exists() && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
+            ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'cashier' && data.exists() && newData.exists() && newData.child('isDeleted').val() === data.child('isDeleted').val() && newData.child('isArchived').val() === data.child('isArchived').val() && newData.child('purchasePrice').val() === data.child('purchasePrice').val() && newData.child('price').val() === data.child('price').val() && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
           }
         },
 
@@ -70,7 +70,7 @@
           ".indexOn": ["_lastModified"],
           ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'owner' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now",
           "$itemId": {
-            ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'cashier' && newData.exists() && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
+            ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'cashier' && newData.exists() && newData.child('isDeleted').val() !== true && newData.child('isArchived').val() !== true && (!data.exists() || newData.child('openingBalance').val() === data.child('openingBalance').val()) && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
           }
         },
 
@@ -78,7 +78,7 @@
           ".indexOn": ["_lastModified"],
           ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'owner' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now",
           "$itemId": {
-            ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'cashier' && newData.exists() && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
+            ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'cashier' && newData.exists() && newData.child('isDeleted').val() !== true && newData.child('isArchived').val() !== true && (!data.exists() || newData.child('openingBalance').val() === data.child('openingBalance').val()) && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
           }
         },
 
@@ -102,16 +102,13 @@
           ".indexOn": ["_lastModified"],
           ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'owner' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now",
           "$itemId": {
-            ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'cashier' && newData.exists() && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
+            ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'cashier' && newData.exists() && newData.child('isDeleted').val() !== true && newData.child('isCanceled').val() !== true && (!data.exists() || (data.child('isCanceled').val() !== true && data.child('isDeleted').val() !== true && newData.child('total').val() === data.child('total').val() && newData.child('discount').val() === data.child('discount').val() && newData.child('initialPaid').val() === data.child('initialPaid').val() && newData.child('type').val() === data.child('type').val() && newData.child('customerId').val() === data.child('customerId').val())) && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
           }
         },
 
         "purchase_invoices": {
           ".indexOn": ["_lastModified"],
-          ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'owner' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now",
-          "$itemId": {
-            ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'cashier' && newData.exists() && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
-          }
+          ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'owner' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
         },
 
         "treasury_moves": {
@@ -126,12 +123,12 @@
           ".indexOn": ["_lastModified"],
           ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'owner' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now",
           "$itemId": {
-            ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'cashier' && newData.exists() && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
+            ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'cashier' && newData.exists() && newData.child('isDeleted').val() !== true && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
           }
         },
 
         "vaults_v2": {
-          ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && (auth.token.role === 'owner' || auth.token.role === 'cashier') && newData.exists() && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
+          ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'owner' && newData.exists() && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
         },
 
         "invoice_counters": {
@@ -140,14 +137,6 @@
 
         "voice_studio_v5": {
           ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'owner' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
-        },
-
-        "archived_financial_summary": {
-          ".write": "auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'owner' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
-        },
-
-        "$other": {
-          ".write": "$other.beginsWith('Archive_') && auth != null && auth.token.storeId === $storeId && $storeId !== 'DemoStore' && $storeId !== 'demostore' && auth.token.role === 'owner' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/status').val() === 'active' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/plan').val() !== 'offline_single' && root.child('Seraj_SaaS_Stores').child($storeId).child('meta/expiry_ts').val() > now"
         }
       }
     }

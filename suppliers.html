@@ -141,7 +141,7 @@
                     <div class="dropdown-menu-item" onclick="toggleAccordionSubMenu(event, 'excelSubOptionsList')"><span>📊 إكسيل (Excel)</span> <span>▼</span></div>
                     <div class="sub-accordion-content" id="excelSubOptionsList" onclick="event.stopPropagation()">
                         <div class="sub-dropdown-item" onclick="exportExcel()">📤 تصدير بيانات</div>
-                        <div class="sub-dropdown-item" onclick="triggerExcelImport()">📥 استيراد من إكسيل</div>
+                        <div class="sub-dropdown-item owner-only" data-role="owner" onclick="triggerExcelImport()">📥 استيراد من إكسيل</div>
                     </div>
                 </div>
             </div>
@@ -926,7 +926,7 @@
                 }
 
                 let devHtml = '';
-                if (item.type === 'voucher' && item.rawObj._device) {
+                if ((!window.SerajAuth || !window.SerajAuth.isOfflineSinglePlan()) && item.type === 'voucher' && item.rawObj._device) {
                     const editTag = (item.rawObj._lastModifiedBy && item.rawObj._lastModifiedBy !== item.rawObj._device)
                         ? ` ✏️ تعديل: ${safeHTML(item.rawObj._lastModifiedBy)}`
                         : '';
@@ -1169,6 +1169,9 @@
 
             safeLoadData();
             closeModals();
+            currentFilterMode = 'vouchers';
+            const filterLblEl = document.getElementById('currentFilterLabel');
+            if (filterLblEl) filterLblEl.innerHTML = '💵 المبالغ المسددة <span class="val-green">له</span> و <span class="val-red">عليه</span>';
             const updatedSupp = DB.calculateSupplierBalances(currentActiveSupplierId);
             if (updatedSupp) {
                 updateAccountSummary(updatedSupp);
@@ -1321,6 +1324,9 @@
             if (explicitAlloc !== undefined) patchObj.allocatedInvoices = explicitAlloc;
 
             let updatedVoucher = DB.updateSupplierVoucher(String(v.id), patchObj);
+            if (!updatedVoucher && v.rawTreasuryId) {
+                updatedVoucher = DB.updateSupplierVoucher(String(v.rawTreasuryId), patchObj);
+            }
             if (!updatedVoucher) {
                 // في حال كان السند قديماً ولم يُرحّل بعد
                 updatedVoucher = DB.addSupplierVoucher({
@@ -1335,7 +1341,7 @@
 
             // عكس حركة الخزينة القديمة وتسجيل الحركة الجديدة عبر المحرك المركزي
             DB.recordTreasuryTransaction({
-                id: String(v.id),
+                id: String(v.rawTreasuryId || v.id),
                 type: newType === 'receipt' ? 'supplier_receipt' : 'purchase_payment',
                 vault: newTreasury,
                 amount: newAmount,
@@ -1392,7 +1398,7 @@
                 const t = item.rawObj;
                 const isReceipt = (t.type === 'receipt' || t.type === 'supplier_receipt');
                 let devHtml = '';
-                if (t._device) {
+                if ((!window.SerajAuth || !window.SerajAuth.isOfflineSinglePlan()) && t._device) {
                     const editTag = (t._lastModifiedBy && t._lastModifiedBy !== t._device)
                         ? `<br>✏️ آخر تعديل: <b>${safeHTML(t._lastModifiedBy)}</b>`
                         : '';
@@ -1427,7 +1433,7 @@
                 }).join('');
 
                 let devHtml = '';
-                if (inv._device) {
+                if ((!window.SerajAuth || !window.SerajAuth.isOfflineSinglePlan()) && inv._device) {
                     const editTag = (inv._lastModifiedBy && inv._lastModifiedBy !== inv._device)
                         ? ` | ✏️ تعديل: <b>${safeHTML(inv._lastModifiedBy)}</b>`
                         : '';
@@ -1652,12 +1658,18 @@
 
         function triggerExcelImport() {
             closeAllMenus();
+            if (window.SerajAuth && !window.SerajAuth.canAccess('import_export_excel')) {
+                return SerajAlert('⛔ استيراد الموردين من إكسيل مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const inp = document.getElementById('excelImportInput');
             inp.value = '';
             inp.click();
         }
 
         function importSuppliersExcel(event) {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('import_export_excel')) {
+                return SerajAlert('⛔ استيراد الموردين من إكسيل مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const file = event.target.files[0];
             if (!file) return;
             if (typeof XLSX === 'undefined') return SerajAlert('مكتبة Excel غير محملة بعد.', 'error');

@@ -3,7 +3,7 @@
 // مسارات نسبية (./) + مكتبات محلية للعمل أوفلاين 100% + Stale-While-Revalidate آمن
 // =========================================================================
 
-const CACHE_NAME = 'pos-commercial-v5-cache-01';
+const CACHE_NAME = 'pos-commercial-v5-cache-02';
 
 const urlsToCache = [
     './',
@@ -69,16 +69,20 @@ self.addEventListener('install', event => {
     self.skipWaiting();
     event.waitUntil(
         caches.open(CACHE_NAME).then(async cache => {
-            for (const url of urlsToCache) {
-                try {
-                    const req = new Request(url, { cache: 'reload' });
-                    const response = await fetch(req);
-                    if (response && response.ok) {
-                        await cache.put(url, response);
+            const BATCH_SIZE = 6;
+            for (let i = 0; i < urlsToCache.length; i += BATCH_SIZE) {
+                const chunk = urlsToCache.slice(i, i + BATCH_SIZE);
+                await Promise.allSettled(chunk.map(async (url) => {
+                    try {
+                        const req = new Request(url, { cache: 'reload' });
+                        const response = await fetch(req);
+                        if (response && response.ok) {
+                            await cache.put(url, response);
+                        }
+                    } catch (err) {
+                        console.warn('SW Precache Skip:', url);
                     }
-                } catch (err) {
-                    console.warn('SW Precache Skip:', url);
-                }
+                }));
             }
         })
     );
@@ -118,10 +122,15 @@ self.addEventListener('fetch', event => {
         url.hostname.includes('securetoken') ||
         url.hostname === 'generativelanguage.googleapis.com' ||
         url.hostname === 'script.google.com' ||
-        url.hostname === 'script.googleusercontent.com'
+        url.hostname === 'script.googleusercontent.com' ||
+        url.hostname === 'accounts.google.com' ||
+        url.hostname === 'oauth2.googleapis.com'
     ) {
         return;
     }
+
+    const isSameOriginHtml = (url.origin === self.location.origin) && (request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/');
+    const cacheKey = (isSameOriginHtml && url.search) ? (url.origin + url.pathname) : request;
 
     const fetchPromise = fetch(request).then(networkResponse => {
         if (
@@ -131,7 +140,7 @@ self.addEventListener('fetch', event => {
         ) {
             const responseClone = networkResponse.clone();
             return caches.open(CACHE_NAME)
-                .then(cache => cache.put(request, responseClone))
+                .then(cache => cache.put(cacheKey, responseClone))
                 .then(() => networkResponse)
                 .catch(() => networkResponse);
         }

@@ -276,7 +276,7 @@
         </div>
 
         <div class="expense-form-container">
-            <div class="vault-cards-row">
+            <div class="vault-cards-row owner-only" data-role="owner">
                 <div class="vault-mini-card active-vault" id="expCardMain" onclick="selectExpVault('main')">
                     <div class="v-title">الرئيسية (كاش)</div>
                     <div class="v-val" id="expVaultMainBal">0.00</div>
@@ -294,7 +294,7 @@
             <div class="treasury-card">
                 <div class="treasury-label" id="expActiveVaultLabel">الصرف من: الخزينة الرئيسية (كاش)</div>
 
-                <div class="balance-box" onclick="openExpensesWithVault(currentExpVault)" style="cursor: pointer;" title="اضغط لعرض مصروفات هذه الخزينة">
+                <div class="balance-box owner-only" data-role="owner" onclick="openExpensesWithVault(currentExpVault)" style="cursor: pointer;" title="اضغط لعرض مصروفات هذه الخزينة">
                     <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--accent-yellow); margin-bottom: 6px; font-weight: bold;">
                         <span>اضغط للعرض</span>
                         <span>سجل المصروفات 📋</span>
@@ -319,7 +319,7 @@
                 </div>
 
                 <button type="button" class="main-action-btn" onclick="window.Utils.preventDoubleClick(this, saveFullExpense)">💾 حفظ المصروف</button>
-                <button type="button" class="details-toggle-btn" style="margin-top: 6px; margin-bottom: 0;" onclick="openExpensesWithVault('all')">📋 عرض جميع المصروفات</button>
+                <button type="button" class="details-toggle-btn owner-only" data-role="owner" style="margin-top: 6px; margin-bottom: 0;" onclick="openExpensesWithVault('all')">📋 عرض جميع المصروفات</button>
             </div>
         </div>
     </div>
@@ -362,7 +362,7 @@
             <span class="text">BACK</span>
         </button>
 
-        <div class="bottom-capsules">
+        <div class="bottom-capsules owner-only" data-role="owner">
             <div class="capsule" onclick="toggleDurationMenu(event)">
                 📅 <span id="currentDurationLabel">مدى العمل</span>
                 <div class="dropdown-menu" id="durationDropdown">
@@ -559,6 +559,9 @@
         // =========================================================================
         function switchView(viewId, skipHistory = false) {
             closeAllMenus();
+            if (window.SerajAuth && !window.SerajAuth.canAccess('view_vault_balances') && viewId !== 'treasury-expense-form-view') {
+                viewId = 'treasury-expense-form-view';
+            }
             document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active-view'));
             const target = document.getElementById(viewId);
             if (target) target.classList.add('active-view');
@@ -605,6 +608,10 @@
                     switchView('treasury-main-view', true);
                 }
             } else if (document.getElementById('treasury-expense-form-view').classList.contains('active-view')) {
+                if (window.SerajAuth && !window.SerajAuth.canAccess('view_vault_balances')) {
+                    if (!fromPopState) window.location.href = 'index.html';
+                    return;
+                }
                 if (!fromPopState && history.state && history.state.treasuryView === 'treasury-expense-form-view') {
                     history.back();
                 } else {
@@ -653,6 +660,9 @@
         }
 
         function openMovementsWithVault(vaultKey) {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('view_treasury_movements')) {
+                return SerajAlert('⛔ استعراض حركة الخزينة مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             currentVaultFilter = vaultKey || 'all';
             const labels = { all: 'كل الخزائن', main: 'الرئيسية (كاش)', insta: 'إنستا (InstaPay)', wallet: 'المحفظة الإلكترونية' };
             document.getElementById('currentVaultFilterLabel').textContent = labels[currentVaultFilter] || 'كل الخزائن';
@@ -661,6 +671,9 @@
         }
 
         function openExpensesWithVault(vaultKey) {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('view_treasury_movements')) {
+                return SerajAlert('⛔ استعراض سجل المصروفات مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const expFilterEl = document.getElementById('expVaultFilter');
             if (expFilterEl) expFilterEl.value = vaultKey || 'all';
             renderLimitExpenses = 50;
@@ -810,9 +823,9 @@
 
             if (currentMovementFilter !== 'all') {
                 if (currentMovementFilter === 'customers') {
-                    list = list.filter(m => ['customer_receipt', 'customer_payment', 'customers'].includes(m.type));
+                    list = list.filter(m => ['customer_receipt', 'customer_payment', 'customers'].includes(m.type) || (['payment', 'receipt'].includes(m.type) && (m.customerId || m.customer)));
                 } else if (currentMovementFilter === 'suppliers') {
-                    list = list.filter(m => ['supplier_receipt', 'supplier_payment', 'purchase_payment', 'suppliers'].includes(m.type));
+                    list = list.filter(m => ['supplier_receipt', 'supplier_payment', 'purchase_payment', 'suppliers'].includes(m.type) || (['payment', 'receipt'].includes(m.type) && (m.supplierId || m.supplier)));
                 } else {
                     list = list.filter(m => m.type === currentMovementFilter);
                 }
@@ -870,7 +883,7 @@
                             <div style="font-size: 14px; color: var(--neon-border); margin-bottom: 3px;">${typeStr}${invNo}${statusTag}</div>
                             <div style="font-size: 15px; ${notesDecoration}">${safeHTML(m.notes || '')}</div>
                             <div class="cell-meta">⌚ ${safeHTML(m.date || '')} | (${safeHTML(vaultText)})</div>
-                            <div class="color-customer" style="font-size: 12px; margin-top: 3px;">📱 ${deviceName}${editTag}</div>
+                            ${(!window.SerajAuth || !window.SerajAuth.isOfflineSinglePlan()) ? `<div class="color-customer" style="font-size: 12px; margin-top: 3px;">📱 ${deviceName}${editTag}</div>` : ''}
                         </td>
                         <td class="val-green" dir="ltr">${round2(m.amountAdd).toFixed(2)}</td>
                         <td class="val-red" dir="ltr">${round2(m.amountDeduct).toFixed(2)}</td>
@@ -968,7 +981,7 @@
                         <div class="inv-info">
                             <div class="inv-customer">${safeHTML(exp.notes || 'مصروف')}</div>
                             <div class="inv-meta">⌚ ${safeHTML(exp.date || '')} | (${safeHTML(vaultText)})</div>
-                            <div class="color-customer" style="font-size: 12px; margin-top: 3px;">📱 ${devName}</div>
+                            ${(!window.SerajAuth || !window.SerajAuth.isOfflineSinglePlan()) ? `<div class="color-customer" style="font-size: 12px; margin-top: 3px;">📱 ${devName}</div>` : ''}
                         </div>
                         <div class="inv-amount val-red">${round2(exp.amountDeduct || exp.amount).toFixed(2)} ج</div>
                     </div>
@@ -1009,6 +1022,9 @@
         // حفظ الحركات المباشرة والمصروفات وعكس الحركات (بدون PIN متكرر للمالك)
         // =========================================================================
         function saveTreasuryTransaction() {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('treasury_direct_move')) {
+                return SerajAlert('⛔ الإيداع والخصم المباشر على الخزينة مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const amount = round2(document.getElementById('trAmount').value);
             const notes = document.getElementById('trNotes').value.trim();
             const date = document.getElementById('trDate').value || window.Utils.getLocalDateString();
@@ -1131,9 +1147,9 @@
             } else {
                 if (currentMovementFilter !== 'all') {
                     if (currentMovementFilter === 'customers') {
-                        list = list.filter(m => ['customer_receipt', 'customer_payment', 'customers'].includes(m.type));
+                        list = list.filter(m => ['customer_receipt', 'customer_payment', 'customers'].includes(m.type) || (['payment', 'receipt'].includes(m.type) && (m.customerId || m.customer)));
                     } else if (currentMovementFilter === 'suppliers') {
-                        list = list.filter(m => ['supplier_receipt', 'supplier_payment', 'purchase_payment', 'suppliers'].includes(m.type));
+                        list = list.filter(m => ['supplier_receipt', 'supplier_payment', 'purchase_payment', 'suppliers'].includes(m.type) || (['payment', 'receipt'].includes(m.type) && (m.supplierId || m.supplier)));
                     } else {
                         list = list.filter(m => m.type === currentMovementFilter);
                     }
@@ -1168,7 +1184,7 @@
                         <td>${idx + 1}</td>
                         <td style="text-align: right;">
                             ${safeHTML(m.notes || '')}${safeHTML(statusTag)}
-                            <div style="font-size: 11px; color: #555; font-weight: normal;">${safeHTML(m.date || '')} | ${safeHTML(vaultLabel)}${m._device ? ' | ' + safeHTML(m._device) : ''}</div>
+                            <div style="font-size: 11px; color: #555; font-weight: normal;">${safeHTML(m.date || '')} | ${safeHTML(vaultLabel)}${(!window.SerajAuth || !window.SerajAuth.isOfflineSinglePlan()) && m._device ? ' | ' + safeHTML(m._device) : ''}</div>
                         </td>
                         <td class="val-green" dir="ltr">${add > 0 ? add.toFixed(2) : '-'}</td>
                         <td class="val-red" dir="ltr">${ded > 0 ? ded.toFixed(2) : '-'}</td>
@@ -1207,6 +1223,9 @@
 
         function printTreasuryA4() {
             closeAllMenus();
+            if (window.SerajAuth && !window.SerajAuth.canAccess('view_treasury_movements')) {
+                return SerajAlert('⛔ طباعة تقارير الخزينة مخصصة لصاحب المحل (المالك) فقط.', 'error');
+            }
             const { list, reportTitle, todayStr } = getFilteredTreasuryReportData();
             if (list.length === 0) return SerajAlert('لا توجد حركات للطباعة في هذه الفترة!', 'error');
             window.PrintManager.printA4HTML(_buildTreasuryA4HTML(list, reportTitle, todayStr), reportTitle);
@@ -1214,6 +1233,9 @@
 
         function printThermalStatement() {
             closeAllMenus();
+            if (window.SerajAuth && !window.SerajAuth.canAccess('view_treasury_movements')) {
+                return SerajAlert('⛔ طباعة تقارير الخزينة مخصصة لصاحب المحل (المالك) فقط.', 'error');
+            }
             const { list, reportTitle, todayStr } = getFilteredTreasuryReportData();
             if (list.length === 0) return SerajAlert('لا توجد حركات للطباعة في هذه الفترة!', 'error');
 
@@ -1261,6 +1283,9 @@
 
         function exportTreasuryPDF() {
             closeAllMenus();
+            if (window.SerajAuth && !window.SerajAuth.canAccess('view_treasury_movements')) {
+                return SerajAlert('⛔ تصدير تقارير الخزينة مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const { list, reportTitle, todayStr } = getFilteredTreasuryReportData();
             if (list.length === 0) return SerajAlert('لا توجد حركات للتصدير في هذه الفترة!', 'error');
             const fileName = `${reportTitle.replace(/\s+/g, '_')}_${todayStr}.pdf`;
@@ -1269,6 +1294,9 @@
 
         function exportTreasuryExcel() {
             closeAllMenus();
+            if (window.SerajAuth && !window.SerajAuth.canAccess('view_treasury_movements')) {
+                return SerajAlert('⛔ تصدير تقارير الخزينة مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
             const { list, reportTitle, todayStr } = getFilteredTreasuryReportData();
             if (list.length === 0) return SerajAlert('لا توجد بيانات لتصديرها!', 'error');
 
@@ -1297,7 +1325,9 @@
             const urlParams = new URLSearchParams(window.location.search);
             const requestedView = (urlParams.get('view') || '').toLowerCase();
 
-            if (requestedView === 'movements') {
+            if (window.SerajAuth && !window.SerajAuth.canAccess('view_vault_balances')) {
+                switchView('treasury-expense-form-view', true);
+            } else if (requestedView === 'movements') {
                 enteredDirectlyToMovements = true;
                 switchView('treasury-movements-view', true);
             } else if (requestedView === 'expenses') {

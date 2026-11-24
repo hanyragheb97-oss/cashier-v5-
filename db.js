@@ -19,7 +19,26 @@ window.APP_BRAND_CONFIG = Object.freeze({
 // تسجيل Service Worker بمسار نسبي (./sw.js) لدعم الجذر والمسارات الفرعية
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW Register Warning:', err));
+        navigator.serviceWorker.register('./sw.js').then((reg) => {
+            if (!reg) return;
+            const notifyUpdate = (worker) => {
+                if (!worker) return;
+                worker.postMessage({ type: 'SKIP_WAITING' });
+                if (typeof showCloudStatus === 'function') {
+                    showCloudStatus('✨ يتوفر تحديث جديد للتطبيق (SW Update Ready)');
+                }
+            };
+            if (reg.waiting) notifyUpdate(reg.waiting);
+            reg.addEventListener('updatefound', () => {
+                const newWorker = reg.installing;
+                if (!newWorker) return;
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        notifyUpdate(newWorker);
+                    }
+                });
+            });
+        }).catch(err => console.warn('SW Register Warning:', err));
     });
 }
 
@@ -93,8 +112,16 @@ if (!myDeviceUid) {
 
 let myDeviceName = localStorage.getItem('seraj_device_name') || '';
 let myDevicePrefix = localStorage.getItem('seraj_device_prefix') || '';
+const _initialPlanMode = (localStorage.getItem('seraj_plan') || '').toLowerCase();
 
-if (currentStoreId && (!myDeviceName || !myDevicePrefix)) {
+if (_initialPlanMode === 'offline_single') {
+    myDeviceName = myDeviceName || 'الجهاز الرئيسي';
+    myDevicePrefix = (myDevicePrefix || 'A').toUpperCase();
+    try {
+        localStorage.setItem('seraj_device_name', myDeviceName);
+        localStorage.setItem('seraj_device_prefix', myDevicePrefix);
+    } catch (e) {}
+} else if (currentStoreId && (!myDeviceName || !myDevicePrefix)) {
     while (!myDeviceName || myDeviceName.trim() === '') {
         myDeviceName = prompt(`مرحباً بك في (${window.APP_BRAND_CONFIG.appName}) 🛠️\n🛑 إجباري: أدخل اسم هذا الجهاز/الكاشير (مثال: كاشير 1 أو المالك):`);
         if (myDeviceName === null) myDeviceName = 'كاشير 1';
@@ -112,6 +139,8 @@ if (currentStoreId && (!myDeviceName || !myDevicePrefix)) {
 }
 myDeviceName = myDeviceName || 'كاشير 1';
 myDevicePrefix = (myDevicePrefix || 'A').toUpperCase();
+window.myDeviceName = myDeviceName;
+window.myDevicePrefix = myDevicePrefix;
 
 // =========================================================================
 // 2. محرك التخزين العملاق (SerajMegaDB: IndexedDB + RAM Cache + BroadcastChannel)
@@ -139,11 +168,12 @@ const HEAVY_STORAGE_KEYS = new Set([
     'seraj_smart_notes',
     'seraj_sales_returns',
     'seraj_outbox_queue',
+    'seraj_outbox_dead_letter',
     'seraj_sync_queue',
     'seraj_delete_queue',
     'seraj_dirty_items',
     'seraj_offline_cert',
-    'seraj_archived_financial_summary',
+    'seraj_bound_device_id',
     'seraj_email_queue',
     'seraj_ai_history'
 ]);
@@ -460,8 +490,19 @@ const _origSetItem = function(key, value) {
     let k = String(key);
     let strVal = String(value);
 
-    // منع تخزين أي مفاتيح اقتطاع قديمة
+    // منع تخزين أي مفاتيح اقتطاع قديمة أو كاش سحابي في باقة الأوفلاين
     if (k.startsWith('seraj_trimmed_')) return;
+    if (k.startsWith('seraj_cloud_cache_') && window.SerajAuth && typeof window.SerajAuth.isOfflineSinglePlan === 'function' && window.SerajAuth.isOfflineSinglePlan()) {
+        return;
+    }
+
+    if (k === 'seraj_device_name') {
+        myDeviceName = strVal || 'كاشير 1';
+        window.myDeviceName = myDeviceName;
+    } else if (k === 'seraj_device_prefix') {
+        myDevicePrefix = (strVal || 'A').toUpperCase();
+        window.myDevicePrefix = myDevicePrefix;
+    }
 
     window._serajRAM.set(k, strVal);
 
@@ -485,7 +526,9 @@ const _origSetItem = function(key, value) {
     _broadcastTabChange('kv_update', k, strVal);
 };
 
-// توجيه قراءة وحذف localStorage لتقرأ من الرامات اللحظية (0ms)
+// توجيه كتابة وقراءة وحذف localStorage لتمر عبر الرامات اللحظية + IndexedDB بدون تضارب
+localStorage.setItem = _origSetItem;
+
 localStorage.getItem = function(key) {
     let k = String(key);
     if (window._serajRAM && window._serajRAM.has(k)) {
@@ -545,6 +588,11 @@ window.addEventListener('storage', (event) => {
         window._serajRAM.delete(event.key);
     } else {
         window._serajRAM.set(event.key, event.newValue);
+    }
+    if (['seraj_user_role', 'seraj_role_sig', 'seraj_store_id', 'seraj_plan', 'seraj_offline_cert'].includes(event.key)) {
+        if (window.SerajAuth && typeof window.SerajAuth.applyRoleGuards === 'function') {
+            window.SerajAuth.applyRoleGuards();
+        }
     }
     let col = event.key.replace(/^seraj_/, '');
     if (typeof emitSerajUpdate === 'function') {
@@ -1642,7 +1690,7 @@ window.Utils = {
                     btn._isExecutingSync = false;
                     btn.disabled = true;
                     if (res && typeof res.finally === 'function') {
-                        res.finally(unlock);
+                        res.catch(err => console.error('preventDoubleClick Async Error:', err)).finally(unlock);
                     } else {
                         unlock();
                     }
@@ -1713,7 +1761,9 @@ if (typeof window.exportToExcel !== 'function') {
                             cell.z = '@';
                         }
                     });
+                    ws['!dir'] = 'rtl';
                     let wb = XLSX.utils.book_new();
+                    wb.Workbook = { Views: [{ RTL: true }] };
                     XLSX.utils.book_append_sheet(wb, ws, 'Report');
                     let cleanXlsx = String(fileName).replace(/\.(xls|xlsx)$/i, '') + '.xlsx';
                     XLSX.writeFile(wb, cleanXlsx);
@@ -2224,15 +2274,71 @@ function _getStoreCloudRef(subPath = '') {
 window.SerajAuth = {
     _currentUser: null,
     _claims: null,
+    _verifiedRole: null,
+    _integritySalt: 'SRJ_V5#K9!2026$POS_SEAL',
+
+    _computeIntegrityHash: function(rawStr) {
+        let str = `${this._integritySalt}|${String(rawStr || '')}|${this._integritySalt.split('').reverse().join('')}`;
+        let h1 = 0x811c9dc5;
+        let h2 = 0x9e3779b9;
+        for (let i = 0; i < str.length; i++) {
+            let ch = str.charCodeAt(i);
+            h1 ^= ch;
+            h1 = Math.imul(h1, 0x01000193);
+            h2 = Math.imul(h2 ^ (ch + i), 0x85ebca6b);
+            h2 = (h2 << 13) | (h2 >>> 19);
+        }
+        h1 ^= h2 >>> 16;
+        h2 ^= h1 >>> 13;
+        return ((h1 >>> 0).toString(36) + '_' + (h2 >>> 0).toString(36)).toUpperCase();
+    },
+
+    _computeRoleSignature: function(storeId, role, uid) {
+        return this._computeIntegrityHash(`ROLE|${storeId}|${role}|${uid || ''}|${myDeviceId}`);
+    },
+
+    _computeOfflineCertHash: function(storeId, deviceId, activationCode, activatedAt, nonce) {
+        return this._computeIntegrityHash(`OFFLINE_V5|${storeId}|${deviceId}|${activationCode}|${activatedAt}|${nonce}`);
+    },
+
+    _purgeOfflineCloudResidue: function() {
+        try {
+            let keysToClean = [];
+            if (window._serajRAM) {
+                window._serajRAM.forEach((_, k) => {
+                    if (k.startsWith('seraj_cloud_cache_') || k.startsWith('seraj_last_sync_ts_') || k === 'seraj_outbox_queue' || k === 'seraj_sync_queue' || k === 'seraj_delete_queue') {
+                        keysToClean.push(k);
+                    }
+                });
+            }
+            keysToClean.forEach(k => localStorage.removeItem(k));
+        } catch (e) {}
+    },
 
     getSession: function() {
         let storeId = getActiveStoreId();
-        let role = (localStorage.getItem('seraj_user_role') || 'owner').toLowerCase();
-        if (role !== 'owner' && role !== 'cashier') role = 'cashier';
         let plan = (localStorage.getItem('seraj_plan') || 'pro').toLowerCase();
         let expiryTs = parseInt(localStorage.getItem('seraj_expiry_ts') || '0', 10) || 0;
         let maxDevices = parseInt(localStorage.getItem('seraj_max_devices') || '5', 10) || 5;
         let cert = safeParseJSON(localStorage.getItem('seraj_offline_cert'), null);
+
+        // Fail-Closed: الافتراضي دائماً cashier إلا بتحقق موثق
+        let role = 'cashier';
+        if (plan === 'offline_single') {
+            role = this.verifyOfflineCertificate() ? 'owner' : 'cashier';
+        } else if (this._verifiedRole === 'owner' || this._verifiedRole === 'cashier') {
+            role = this._verifiedRole;
+        } else {
+            let storedRole = (localStorage.getItem('seraj_user_role') || '').toLowerCase();
+            let storedSig = localStorage.getItem('seraj_role_sig') || '';
+            let storedUid = localStorage.getItem('seraj_auth_uid') || '';
+            if (storedRole === 'owner' && storeId && storedSig && storedSig === this._computeRoleSignature(storeId, 'owner', storedUid)) {
+                role = 'owner';
+            } else {
+                role = 'cashier';
+            }
+        }
+
         return {
             storeId,
             role,
@@ -2246,8 +2352,7 @@ window.SerajAuth = {
     },
 
     isOfflineSinglePlan: function() {
-        let sess = this.getSession();
-        return sess.plan === 'offline_single';
+        return (localStorage.getItem('seraj_plan') || '').toLowerCase() === 'offline_single';
     },
 
     isOwner: function() {
@@ -2255,7 +2360,7 @@ window.SerajAuth = {
     },
 
     isCashier: function() {
-        return this.getSession().role === 'cashier';
+        return this.getSession().role !== 'owner';
     },
 
     canAccess: function(permissionKey) {
@@ -2266,36 +2371,67 @@ window.SerajAuth = {
             'profit_detailed',
             'profit_summary',
             'profit_margin',
+            'view_purchase_prices',
+            'view_inventory_cost',
+            'inventory_detailed',
+            'create_purchase',
+            'edit_purchase_invoice',
+            'cancel_purchase_invoice',
+            'edit_sales_invoice',
+            'cancel_sales_invoice',
+            'delete_product',
+            'add_product',
+            'edit_product',
+            'edit_product_lots',
+            'update_product_price',
+            'bulk_price_update',
+            'import_export_excel',
+            'export_backup',
             'factory_reset',
             'wipe_store',
             'restore_backup',
             'delete_treasury_move',
             'reverse_treasury_move',
+            'view_vault_balances',
+            'treasury_direct_move',
+            'view_treasury_movements',
+            'ai_financial_queries',
             'manage_devices',
-            'manage_users'
+            'manage_users',
+            'manage_voice_config',
+            'manage_store_settings'
         ]);
         return !cashierForbidden.has(String(permissionKey || '').toLowerCase());
     },
 
-    // حارس الصلاحيات على مستوى الصفحات والواجهة (المالك مفتوح تلقائياً بدون PIN، والكاشير يُمنع من الأرباح والعمليات الخطرة)
+    // حارس الصلاحيات والباقة على مستوى الصفحات والواجهة (Fail-Closed)
     applyRoleGuards: function() {
         let sess = this.getSession();
         if (document.documentElement) {
             document.documentElement.setAttribute('data-user-role', sess.role);
             document.documentElement.setAttribute('data-store-plan', sess.plan);
         }
+
+        // حقن قواعد إخفاء خفيفة لعناصر السحابة وتعدد الأجهزة والصلاحيات بدون تعديل style.css
+        if (document.head && !document.getElementById('seraj-rbac-plan-guards')) {
+            let st = document.createElement('style');
+            st.id = 'seraj-rbac-plan-guards';
+            st.textContent = 'html[data-store-plan="offline_single"] .cloud-only-btn, html[data-store-plan="offline_single"] .cloud-only, html[data-store-plan="offline_single"] .multi-device-only { display: none !important; } html[data-user-role="cashier"] .owner-only, html[data-user-role="cashier"] [data-role="owner"], html[data-user-role="cashier"] [data-owner-only="true"] { display: none !important; }';
+            document.head.appendChild(st);
+        }
+
         if (sess.role === 'owner') return true;
 
         let path = (window.location.pathname || '').toLowerCase();
-        let blockedPages = ['profit_detailed.html', 'profit_summary.html', 'profit_margin.html'];
+        let blockedPages = ['profit_detailed.html', 'profit_summary.html', 'profit_margin.html', 'inventory_detailed.html', 'purchases.html'];
         if (blockedPages.some(p => path.endsWith(p))) {
+            if (document.body) document.body.style.visibility = 'hidden';
             window.SerajAlert('⛔ هذه الشاشة مخصصة لصاحب المحل (المالك) فقط.', 'error', () => {
                 window.location.replace('index.html');
             });
             return false;
         }
 
-        // إخفاء العناصر المخصصة للمالك فقط من الواجهة
         const hideOwnerOnly = () => {
             try {
                 document.querySelectorAll('[data-role="owner"], .owner-only, [data-owner-only="true"]').forEach(el => {
@@ -2329,8 +2465,8 @@ window.SerajAuth = {
     activateOfflineSingleLicense: async function(storeIdInput, activationCode, appsScriptConfig = null) {
         let cleanStoreId = String(storeIdInput || '').trim().replace(/[.#$\[\]\/\\]/g, '_');
         let cleanCode = String(activationCode || '').trim();
-        if (!cleanStoreId || !cleanCode) {
-            throw new Error('يرجى إدخال كود المحل وكود التفعيل.');
+        if (!cleanStoreId || !cleanCode || cleanStoreId.toLowerCase() === 'demostore') {
+            throw new Error('يرجى إدخال كود محل صالح وكود التفعيل.');
         }
         if (!navigator.onLine) {
             throw new Error('يتطلب التفعيل لأول مرة اتصالاً بالإنترنت لمدة 3 ثوانٍ فقط.');
@@ -2340,7 +2476,7 @@ window.SerajAuth = {
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         let rtdb = firebase.database();
 
-        // التحقق من كود التفعيل وربطه بـ deviceId وقفل الكود
+        // التحقق من كود التفعيل وربطه بـ deviceId وقفل الكود لمرة واحدة
         let codeRef = rtdb.ref(`Activation_Codes/${cleanCode}`);
         let snap = await codeRef.once('value');
         if (!snap.exists()) {
@@ -2350,19 +2486,21 @@ window.SerajAuth = {
         if (codeData.plan && codeData.plan !== 'offline_single') {
             throw new Error('هذا الكود غير مخصص لباقة الجهاز الواحد الأوفلاين.');
         }
-        if (codeData.isUsed && codeData.boundDeviceId && codeData.boundDeviceId !== myDeviceId) {
-            throw new Error('هذا الكود مستخدم ومقفل مسبقاً على جهاز آخر.');
+        if (codeData.isUsed) {
+            throw new Error('هذا الكود مستخدم ومقفل مسبقاً.');
         }
 
         let nowTs = Date.now();
+        let nonce = window.Utils.generateUUID('LIC');
         await codeRef.update({
             isUsed: true,
             usedAt: nowTs,
             boundDeviceId: myDeviceId,
             boundStoreId: cleanStoreId,
-            boundDeviceName: myDeviceName
+            boundDeviceName: 'الجهاز الرئيسي'
         });
 
+        let sigV2 = this._computeOfflineCertHash(cleanStoreId, myDeviceId, cleanCode, nowTs, nonce);
         let cert = {
             version: 5,
             plan: 'offline_single',
@@ -2370,15 +2508,24 @@ window.SerajAuth = {
             deviceId: myDeviceId,
             activationCode: cleanCode,
             activatedAt: nowTs,
+            nonce: nonce,
             role: 'owner',
-            signature: btoa(unescape(encodeURIComponent(`${cleanStoreId}|${myDeviceId}|${cleanCode}|offline_single`)))
+            sigV2: sigV2
         };
 
+        myDeviceName = 'الجهاز الرئيسي';
+        myDevicePrefix = 'A';
+        _internalSetItem('seraj_device_name', myDeviceName);
+        _internalSetItem('seraj_device_prefix', myDevicePrefix);
+        _internalSetItem('seraj_bound_device_id', myDeviceId);
         _internalSetItem('seraj_store_id', cleanStoreId);
         _internalSetItem('seraj_plan', 'offline_single');
         _internalSetItem('seraj_user_role', 'owner');
+        _internalSetItem('seraj_role_sig', this._computeRoleSignature(cleanStoreId, 'owner', cleanCode));
+        _internalSetItem('seraj_auth_uid', cleanCode);
         _internalSetItem('seraj_offline_cert', JSON.stringify(cert));
         _internalSetItem('seraj_last_offline_backup_ts', String(nowTs));
+        this._verifiedRole = 'owner';
 
         if (appsScriptConfig && appsScriptConfig.url && appsScriptConfig.secretToken) {
             _internalSetItem('seraj_gas_backup_config', JSON.stringify({
@@ -2390,6 +2537,7 @@ window.SerajAuth = {
         }
 
         currentStoreId = cleanStoreId;
+        this._purgeOfflineCloudResidue();
         await this.requestPersistentStorage();
 
         // إغلاق اتصال Firebase فوراً لضمان استهلاك 0 من السحابة بعد التفعيل
@@ -2403,8 +2551,14 @@ window.SerajAuth = {
     verifyOfflineCertificate: function() {
         let cert = safeParseJSON(localStorage.getItem('seraj_offline_cert'), null);
         if (!cert || cert.plan !== 'offline_single') return false;
-        let expectedSig = btoa(unescape(encodeURIComponent(`${cert.storeId}|${myDeviceId}|${cert.activationCode}|offline_single`)));
-        return (cert.deviceId === myDeviceId && cert.signature === expectedSig);
+        let activeStore = getActiveStoreId();
+        if (!activeStore || cert.storeId !== activeStore) return false;
+        if (!cert.deviceId || cert.deviceId !== myDeviceId) return false;
+        let boundId = localStorage.getItem('seraj_bound_device_id');
+        if (boundId && boundId !== myDeviceId) return false;
+        if (!cert.sigV2 || !cert.nonce || !cert.activatedAt || !cert.activationCode) return false;
+        let expectedHash = this._computeOfflineCertHash(cert.storeId, myDeviceId, cert.activationCode, cert.activatedAt, cert.nonce);
+        return cert.sigV2 === expectedHash;
     },
 
     // فحص تذكير النسخ الاحتياطي كل 7 أيام لباقة الأوفلاين
@@ -2429,7 +2583,7 @@ window.SerajAuth = {
         return false;
     },
 
-    // استخراج Custom Claims من Firebase Auth وتحديث الجلسة
+    // استخراج Custom Claims من Firebase Auth وتوقيع الدور محلياً لمنع التلاعب
     syncAuthClaims: async function(user) {
         if (!user || typeof user.getIdTokenResult !== 'function') return null;
         try {
@@ -2437,12 +2591,17 @@ window.SerajAuth = {
             let claims = tokenResult.claims || {};
             this._currentUser = user;
             this._claims = claims;
-            if (claims.storeId) {
-                _internalSetItem('seraj_store_id', String(claims.storeId).trim());
+            let claimedStore = claims.storeId ? String(claims.storeId).trim().replace(/[.#$\[\]\/\\]/g, '_') : '';
+            if (claimedStore && claimedStore.toLowerCase() !== 'demostore') {
+                _internalSetItem('seraj_store_id', claimedStore);
                 currentStoreId = getActiveStoreId();
             }
-            if (claims.role === 'owner' || claims.role === 'cashier') {
-                _internalSetItem('seraj_user_role', claims.role);
+            let verifiedRole = (claims.role === 'owner') ? 'owner' : 'cashier';
+            this._verifiedRole = verifiedRole;
+            _internalSetItem('seraj_user_role', verifiedRole);
+            _internalSetItem('seraj_auth_uid', String(user.uid || ''));
+            if (claimedStore) {
+                _internalSetItem('seraj_role_sig', this._computeRoleSignature(claimedStore, verifiedRole, user.uid || ''));
             }
             if (claims.plan) {
                 _internalSetItem('seraj_plan', String(claims.plan).toLowerCase());
@@ -2471,8 +2630,13 @@ window.SerajAuth = {
             }
         } catch (e) {}
         cloudReady = false;
+        this._currentUser = null;
+        this._claims = null;
+        this._verifiedRole = null;
         localStorage.removeItem('seraj_store_id');
         localStorage.removeItem('seraj_user_role');
+        localStorage.removeItem('seraj_role_sig');
+        localStorage.removeItem('seraj_auth_uid');
         localStorage.removeItem('seraj_plan');
         localStorage.removeItem('seraj_expiry_ts');
         window.location.replace('index.html');
@@ -2597,6 +2761,39 @@ function _getDocCloudKey(item) {
     return String(raw || '').replace(/[.#$\[\]\/\\]/g, '_');
 }
 
+let _outboxSeqCounter = 0;
+function _nextOutboxSeq() {
+    let now = Date.now();
+    _outboxSeqCounter = (now > _outboxSeqCounter) ? now : (_outboxSeqCounter + 1);
+    return _outboxSeqCounter;
+}
+
+function _sanitizeForFirebase(obj) {
+    if (obj === null || obj === undefined) return null;
+    try {
+        return JSON.parse(JSON.stringify(obj, (k, v) => {
+            if (typeof v === 'number' && !isFinite(v)) return 0;
+            return v;
+        }));
+    } catch (e) {
+        return null;
+    }
+}
+
+function _quarantineDeadLetter(entry, reason) {
+    try {
+        let dead = safeParseJSON(localStorage.getItem('seraj_outbox_dead_letter'), []);
+        if (!Array.isArray(dead)) dead = [];
+        dead.push({
+            ...entry,
+            failedAt: Date.now(),
+            reason: String(reason || 'unknown')
+        });
+        if (dead.length > 100) dead = dead.slice(-100);
+        _internalSetItem('seraj_outbox_dead_letter', JSON.stringify(dead));
+    } catch (e) {}
+}
+
 // إضافة عملية مفردة (Dirty-Item Sync) إلى طابور FIFO Outbox مع دمج التعديلات المتتالية لنفس العنصر
 function enqueueOutboxOp(colName, itemId, opType = 'upsert', payload = null, immediate = false) {
     if (window.SerajAuth.isOfflineSinglePlan()) return;
@@ -2628,11 +2825,12 @@ function enqueueOutboxOp(colName, itemId, opType = 'upsert', payload = null, imm
     }
 
     outbox.push({
-        seq: now + Math.random(),
+        seq: _nextOutboxSeq(),
         col: cleanCol,
         key: safeKey,
         op: opType, // 'upsert' | 'tombstone' | 'delete'
         data: entryData,
+        retries: 0,
         ts: now
     });
 
@@ -2689,39 +2887,94 @@ function flushOutboxQueue() {
                 showCloudStatus(`⏳ جاري مزامنة (${outbox.length}) حركة...`);
                 let batch = outbox.slice(0, 60);
                 let updatesObj = {};
+                let validEntries = [];
                 let sentSigMap = new Map();
+                let uploadNow = getServerNow();
 
                 batch.forEach(entry => {
                     if (!entry || !entry.col || !entry.key) return;
                     let path = `${entry.col}/${entry.key}`;
                     if (entry.op === 'delete') {
-                        updatesObj[path] = null;
-                        sentSigMap.set(`${entry.col}|${entry.key}`, entry.seq);
-                    } else if (entry.data) {
-                        try {
-                            let cleanCopy = JSON.parse(JSON.stringify(entry.data));
-                            updatesObj[path] = cleanCopy;
+                        if (entry.col === 'treasury_moves') {
                             sentSigMap.set(`${entry.col}|${entry.key}`, entry.seq);
-                        } catch (e) {}
+                            return;
+                        }
+                        updatesObj[path] = null;
+                        validEntries.push({ entry, path, val: null });
+                    } else if (entry.data) {
+                        let cleanCopy = _sanitizeForFirebase(entry.data);
+                        if (cleanCopy && typeof cleanCopy === 'object') {
+                            // تحديث _lastModified لحظة الرفع الفعلي لضمان التقاطها عبر Delta Sync في باقي الأجهزة دون تغيير date/timestamp المحاسبي
+                            cleanCopy._lastModified = uploadNow;
+                            updatesObj[path] = cleanCopy;
+                            validEntries.push({ entry, path, val: cleanCopy });
+                        } else {
+                            _quarantineDeadLetter(entry, 'invalid_json_payload');
+                            sentSigMap.set(`${entry.col}|${entry.key}`, entry.seq);
+                        }
                     }
                 });
 
-                if (Object.keys(updatesObj).length === 0) {
+                if (validEntries.length === 0) {
                     _saveOutbox(outbox.slice(batch.length));
                     continue;
                 }
 
-                await storeRef.update(updatesObj);
+                let retryIncrementMap = new Map();
+                let shouldBreakLoop = false;
 
-                // حذف العناصر التي رُفعت فقط، مع الإبقاء على أي عنصر عُدّل مجدداً أثناء الرفع
+                try {
+                    await storeRef.update(updatesObj);
+                    validEntries.forEach(({ entry }) => {
+                        sentSigMap.set(`${entry.col}|${entry.key}`, entry.seq);
+                    });
+                } catch (batchErr) {
+                    if (!navigator.onLine) throw batchErr;
+                    // Poison Pill Fallback: عزل الحركة التالفة/المرفوضة فردياً حتى لا يتجمد طابور المزامنة
+                    console.warn('Batch sync failed, activating Poison Pill Fallback:', batchErr);
+                    for (let i = 0; i < validEntries.length; i++) {
+                        let { entry, path, val } = validEntries[i];
+                        let sigKey = `${entry.col}|${entry.key}`;
+                        try {
+                            if (val === null) await storeRef.child(path).remove();
+                            else await storeRef.child(path).set(val);
+                            sentSigMap.set(sigKey, entry.seq);
+                        } catch (itemErr) {
+                            let errCode = String(itemErr && itemErr.code || '').toUpperCase();
+                            let errMsg = String(itemErr && itemErr.message || itemErr || '');
+                            let isPermanentReject = (
+                                errCode.includes('PERMISSION_DENIED') ||
+                                errMsg.toLowerCase().includes('permission_denied') ||
+                                errMsg.toLowerCase().includes('invalid') ||
+                                (Number(entry.retries) || 0) >= 4
+                            );
+                            if (isPermanentReject) {
+                                _quarantineDeadLetter(entry, errMsg);
+                                sentSigMap.set(sigKey, entry.seq);
+                            } else {
+                                retryIncrementMap.set(sigKey, (Number(entry.retries) || 0) + 1);
+                                shouldBreakLoop = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // حذف العناصر التي رُفعت أو عُزلت، مع الإبقاء على أي عنصر عُدّل مجدداً أثناء الرفع
                 let latestOutbox = _getOutbox();
                 let remaining = latestOutbox.filter(entry => {
                     if (!entry || !entry.col || !entry.key) return false;
-                    let sentSeq = sentSigMap.get(`${entry.col}|${entry.key}`);
+                    let sigKey = `${entry.col}|${entry.key}`;
+                    if (retryIncrementMap.has(sigKey)) {
+                        entry.retries = retryIncrementMap.get(sigKey);
+                        return true;
+                    }
+                    let sentSeq = sentSigMap.get(sigKey);
                     if (sentSeq === undefined) return true;
                     return Number(entry.seq) > Number(sentSeq);
                 });
                 _saveOutbox(remaining);
+                if (shouldBreakLoop) break;
 
                 if (remaining.length === 0) {
                     showCloudStatus('✅ اكتملت المزامنة السحابية بنجاح');
@@ -2746,6 +2999,26 @@ function flushOutboxQueue() {
 let localCollectionsCache = {};
 let renderTimers = {};
 let _dirtySaveTimers = {};
+let _dirtySaveFlushers = {};
+
+function _flushAllDirtyTimersSync() {
+    Object.keys(_dirtySaveFlushers).forEach(col => {
+        if (_dirtySaveTimers[col]) {
+            clearTimeout(_dirtySaveTimers[col]);
+            delete _dirtySaveTimers[col];
+        }
+        let fn = _dirtySaveFlushers[col];
+        delete _dirtySaveFlushers[col];
+        if (typeof fn === 'function') {
+            try { fn(); } catch (e) {}
+        }
+    });
+}
+
+window.addEventListener('pagehide', _flushAllDirtyTimersSync);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') _flushAllDirtyTimersSync();
+});
 let _notifiedSmartNotes = {};
 
 const SYNCED_COLLECTIONS = [
@@ -2777,8 +3050,10 @@ function saveDirtyItem(colName, itemData, immediate = false) {
 
     _internalSetItem('seraj_' + cleanCol, JSON.stringify(list));
     localCollectionsCache[cleanCol] = [...list];
-    _internalSetItem('seraj_cloud_cache_' + cleanCol, JSON.stringify(list));
-    addToSyncQueue(cleanCol, itemData, immediate);
+    if (!window.SerajAuth.isOfflineSinglePlan()) {
+        _internalSetItem('seraj_cloud_cache_' + cleanCol, JSON.stringify(list));
+        addToSyncQueue(cleanCol, itemData, immediate);
+    }
     emitSerajUpdate(cleanCol, 'local');
 }
 
@@ -2790,12 +3065,13 @@ function saveArrayToQueueSafely(colName, newArray) {
     emitSerajUpdate(cleanCol, 'local');
 
     if (window.SerajAuth.isOfflineSinglePlan()) {
-        _internalSetItem('seraj_cloud_cache_' + cleanCol, JSON.stringify(newArray));
         return;
     }
 
     if (_dirtySaveTimers[cleanCol]) clearTimeout(_dirtySaveTimers[cleanCol]);
-    _dirtySaveTimers[cleanCol] = setTimeout(() => {
+    const _runDirtyDiff = () => {
+        delete _dirtySaveFlushers[cleanCol];
+        delete _dirtySaveTimers[cleanCol];
         try {
             let rawOldCache = localStorage.getItem('seraj_cloud_cache_' + cleanCol);
             if (!rawOldCache) {
@@ -2847,7 +3123,20 @@ function saveArrayToQueueSafely(colName, newArray) {
         } catch (e) {
             console.error('Dirty Queue Sync Error:', e);
         }
-    }, 30);
+    };
+    const _isCriticalFinancialCol = (
+        cleanCol === 'sales_invoices' ||
+        cleanCol === 'purchase_invoices' ||
+        cleanCol === 'treasury_moves' ||
+        cleanCol === 'customer_vouchers' ||
+        cleanCol === 'supplier_vouchers'
+    );
+    if (_isCriticalFinancialCol) {
+        _runDirtyDiff();
+    } else {
+        _dirtySaveFlushers[cleanCol] = _runDirtyDiff;
+        _dirtySaveTimers[cleanCol] = setTimeout(_runDirtyDiff, 30);
+    }
 }
 
 // رادارات التزامن التفاضلي (Delta Sync بـ orderByChild('_lastModified').startAt(lastSyncTs)) + system_epoch
@@ -2954,9 +3243,17 @@ async function initCloud() {
     currentStoreId = getActiveStoreId();
     window.SerajAuth.applyRoleGuards();
 
-    // 1. وضع باقة جهاز واحد أوفلاين (0 استهلاك Firebase)
+    // 1. وضع باقة جهاز واحد أوفلاين (0 استهلاك Firebase + تحقق إلزامي من الشهادة على كل الصفحات)
     if (window.SerajAuth.isOfflineSinglePlan()) {
         cloudReady = false;
+        if (!window.SerajAuth.verifyOfflineCertificate()) {
+            if (!_isEntryIndexPage) {
+                await window.SerajAuth.signOut();
+            }
+            window.dispatchEvent(new CustomEvent('seraj:cloudReady', { detail: { mode: 'invalid_offline_cert', storeId: '' } }));
+            return;
+        }
+        window.SerajAuth._purgeOfflineCloudResidue();
         await window.SerajAuth.requestPersistentStorage();
         window.SerajAuth.checkOfflineBackupReminder();
         if (window.DB && typeof window.DB.checkAutoNightlyEmail === 'function') {
@@ -2986,19 +3283,73 @@ async function initCloud() {
         }
         window.dbCloud = firebase.database();
 
-        // مزامنة فرق التوقيت مع السيرفر للتحقق الدقيق من expiry_ts
-        window.dbCloud.ref('.info/serverTimeOffset').on('value', (snap) => {
-            _serverTimeOffset = Number(snap.val() || 0);
-        });
-
-        // مزامنة صلاحيات Firebase Auth Custom Claims إن وجد مستخدم مسجل
+        // التحقق الصارم من جلسة Firebase Auth ومطابقة storeId ومنع التلاعب المحلي
         if (typeof firebase.auth === 'function') {
-            firebase.auth().onAuthStateChanged(async (user) => {
-                if (user) {
-                    await window.SerajAuth.syncAuthClaims(user);
-                }
+            let authUser = await new Promise((resolve) => {
+                let settled = false;
+                let timer = setTimeout(() => {
+                    if (!settled) { settled = true; resolve(firebase.auth().currentUser || null); }
+                }, 6000);
+                firebase.auth().onAuthStateChanged(async (u) => {
+                    if (!settled) {
+                        settled = true;
+                        clearTimeout(timer);
+                        resolve(u || null);
+                    } else if (!u && !_isEntryIndexPage && !window.SerajAuth.isOfflineSinglePlan()) {
+                        await window.SerajAuth.signOut();
+                    } else if (u) {
+                        await window.SerajAuth.syncAuthClaims(u);
+                    }
+                });
             });
+
+            if (!authUser) {
+                cloudReady = false;
+                if (!_isEntryIndexPage) {
+                    await window.SerajAuth.signOut();
+                    return;
+                }
+                window.dispatchEvent(new CustomEvent('seraj:cloudReady', { detail: { mode: 'unauthenticated', storeId: '' } }));
+                return;
+            }
+
+            let claims = await window.SerajAuth.syncAuthClaims(authUser);
+            let claimedStore = (claims && claims.storeId) ? String(claims.storeId).trim().replace(/[.#$\[\]\/\\]/g, '_') : '';
+            if (!claimedStore || claimedStore !== currentStoreId) {
+                cloudReady = false;
+                await window.SerajAuth.signOut();
+                return;
+            }
         }
+
+        // مزامنة فرق التوقيت مع السيرفر واستقرار جلسة Auth قبل فحص meta وتشغيل الرادارات
+        const _waitServerTimeAndAuthReady = async () => {
+            await new Promise((resolve) => {
+                let done = false;
+                const finish = () => { if (!done) { done = true; resolve(); } };
+                setTimeout(finish, 2000);
+                window.dbCloud.ref('.info/serverTimeOffset').on('value', (snap) => {
+                    _serverTimeOffset = Number(snap.val() || 0);
+                    finish();
+                });
+            });
+            if (typeof firebase.auth === 'function' && !firebase.auth().currentUser) {
+                await new Promise((resolve) => {
+                    let done = false;
+                    let unsub = null;
+                    const finish = () => {
+                        if (!done) {
+                            done = true;
+                            if (typeof unsub === 'function') { try { unsub(); } catch (e) {} }
+                            resolve();
+                        }
+                    };
+                    setTimeout(finish, 2500);
+                    unsub = firebase.auth().onAuthStateChanged(() => finish());
+                });
+            }
+        };
+        await _waitServerTimeAndAuthReady();
 
         let storeRef = _getStoreCloudRef();
         if (!storeRef) return;
@@ -3152,7 +3503,19 @@ function updateLocalSingleItem(col, data) {
         localCollectionsCache[col] = safeParseJSON(localStorage.getItem('seraj_' + col), []);
     }
     let arr = localCollectionsCache[col];
-    let existingIndex = arr.findIndex(item => item && String(item.id) === docId);
+    let existingIndex = docKey
+        ? arr.findIndex(item => item && item._cloudKey && String(item._cloudKey) === docKey)
+        : -1;
+    if (existingIndex === -1) {
+        existingIndex = arr.findIndex(item => {
+            if (!item || String(item.id) !== docId) return false;
+            if (item._cloudKey && data._cloudKey && String(item._cloudKey) !== String(data._cloudKey)) return false;
+            return true;
+        });
+    }
+    if (existingIndex === -1 && arr.some(item => item && String(item.id) === docId)) {
+        data._idCollision = true;
+    }
 
     let isChangedOrNew = false;
     if (existingIndex > -1) {
@@ -3347,10 +3710,25 @@ window.DB = {
 
         if (data.vaults_v2) _internalSetItem('seraj_vaults_v2', JSON.stringify(data.vaults_v2));
         if (data.invoice_counters) _internalSetItem('seraj_invoice_counters', JSON.stringify(data.invoice_counters));
-        if (data.archived_financial_summary) _internalSetItem('seraj_archived_financial_summary', JSON.stringify(data.archived_financial_summary));
         if (data.meta && data.meta.system_epoch) _internalSetItem('seraj_system_epoch', String(data.meta.system_epoch));
 
+        if (!data.vaults_v2) {
+            let recalcVaults = this.recalculateVaultBalances(false);
+            _internalSetItem('seraj_vaults_v2', JSON.stringify(recalcVaults));
+        }
+
         _saveOutbox([]);
+
+        if (window.SerajMegaDB && typeof window.SerajMegaDB.setBatch === 'function' && window._serajRAM) {
+            let _pullBatchEntries = [];
+            window._serajRAM.forEach((v, k) => {
+                if (String(k).startsWith('seraj_')) _pullBatchEntries.push([k, v]);
+            });
+            if (_pullBatchEntries.length > 0) {
+                await window.SerajMegaDB.setBatch(_pullBatchEntries);
+            }
+        }
+
         if (autoReload) {
             _broadcastTabChange('reload_required', 'all', null);
             window.location.reload();
@@ -3358,14 +3736,17 @@ window.DB = {
         return true;
     },
 
-    syncFromCloud: function() {
+    syncFromCloud: async function() {
         if (window.SerajAuth.isOfflineSinglePlan()) {
             window.SerajAlert('هذه النسخة تعمل بباقة الأوفلاين الدائمة ولا تستخدم السحابة.', 'info');
-            return Promise.resolve(false);
+            return false;
+        }
+        if (!cloudReady && navigator.onLine && getActiveStoreId()) {
+            try { await initCloud(); } catch (e) {}
         }
         if (!cloudReady || !navigator.onLine || !window.dbCloud || !getActiveStoreId()) {
             window.SerajAlert('يجب الاتصال بالإنترنت وتسجيل الدخول لسحب بيانات المحل من السحابة!', 'error');
-            return Promise.resolve(false);
+            return false;
         }
 
         return new Promise((resolve) => {
@@ -3533,10 +3914,41 @@ window.DB = {
                 return (Number(a.timestamp) || 0) - (Number(b.timestamp) || 0);
             });
 
-            // حذف الدفعات الصفرية الوسيطة فقط، والإبقاء دائماً على آخر دفعة حتى لو رصيدها 0 لحماية السعر وقفل الشراء
+            // تسوية الدفعات السالبة ضد الموجبة تلقائياً بترتيب FIFO (_settleNegVsPosInNormalize)
+            let negDeficit = 0;
+            let hasPositiveLot = false;
+            product.lots.forEach(l => {
+                if (l.stock < -0.0001) {
+                    negDeficit = round4(negDeficit + Math.abs(l.stock));
+                } else if (l.stock > 0.0001) {
+                    hasPositiveLot = true;
+                }
+            });
+            if (negDeficit > 0.0001 && hasPositiveLot) {
+                product.lots.forEach(l => {
+                    if (l.stock < -0.0001) l.stock = 0;
+                });
+                for (let i = 0; i < product.lots.length && negDeficit > 0.0001; i++) {
+                    if (product.lots[i].stock > 0.0001) {
+                        let take = Math.min(product.lots[i].stock, negDeficit);
+                        product.lots[i].stock = round4(product.lots[i].stock - take);
+                        negDeficit = round4(negDeficit - take);
+                    }
+                }
+                if (negDeficit > 0.0001 && product.lots.length > 0) {
+                    let tailRef = product.lots[product.lots.length - 1];
+                    tailRef.stock = round4((parseFloat(tailRef.stock) || 0) - negDeficit);
+                }
+            }
+
+            // حذف الدفعات الصفرية الوسيطة فقط، والإبقاء دائماً على آخر دفعة حقيقية لحماية السعر وقفل الشراء
             let lastLot = product.lots[product.lots.length - 1];
             let nonZeroPrior = product.lots.slice(0, -1).filter(l => window.Utils.isNonZeroStock(l.stock));
-            product.lots = [...nonZeroPrior, lastLot];
+            if (lastLot && !window.Utils.isNonZeroStock(lastLot.stock) && lastLot.isNegativeOverflow && nonZeroPrior.length > 0) {
+                product.lots = [...nonZeroPrior];
+            } else {
+                product.lots = [...nonZeroPrior, lastLot];
+            }
         }
 
         // تحديث إجمالي الرصيد والأسعار المعتمدة (أولوية قراءة p.price / p.purchasePrice ثم آخر دفعة)
@@ -3581,8 +3993,8 @@ window.DB = {
             let child = products.find(p => p && String(p.id) === key && !p.isDeleted && !p.isArchived);
             if (!child) return 0;
 
-            let parentId = child.parentProductId || child.parentId || child.linkedParentId;
-            let unitsPerParent = window.Utils.round4(child.unitsPerPack || child.packQty || child.conversionFactor || child.unpackQty || 0);
+            let parentId = child.parentProductId || child.autoParentId || child.parentId || child.linkedParentId;
+            let unitsPerParent = window.Utils.round4(child.unitsPerPack || child.autoConversionRate || child.packQty || child.conversionFactor || child.unpackQty || 0);
             if (!parentId || unitsPerParent <= 0) return 0;
 
             let parentKey = String(parentId);
@@ -3600,13 +4012,14 @@ window.DB = {
 
             let availableParents = window.Utils.round4(parent.stock);
             if (availableParents < neededParents) {
-                let parentDeficit = window.Utils.round4(neededParents - Math.max(0, availableParents));
+                let parentDeficit = window.Utils.round4(neededParents - availableParents);
                 unpackRecursive(parent.id, parentDeficit, depth + 1, new Set(visitedSet));
                 this.normalizeProductLots(parent);
                 availableParents = window.Utils.round4(parent.stock);
             }
 
-            let parentsToOpen = Math.min(neededParents, Math.floor(Math.max(0, availableParents) + 0.0001));
+            // فتح الكراتين المطلوبة حتى لو نزل رصيد الأب للسالب لتصفيته لاحقاً مع فواتير الشراء
+            let parentsToOpen = neededParents;
             if (parentsToOpen <= 0) return 0;
 
             // خصم الكراتين المفتوحة من الأب بطريقة FIFO لحساب تكلفة الوحدة المفكوكة بدقة
@@ -3813,15 +4226,17 @@ window.DB = {
             this.normalizeProductLots(prod);
             let stockBefore = window.Utils.round4(prod.stock);
 
-            // فك الكراتين تلقائياً قبل الخصم إذا كان الرصيد لا يكفي
+            // فك الكراتين تلقائياً قبل الخصم إذا كان الرصيد لا يكفي (شاملاً أي عجز سالب سابق)
             if (autoUnpack && stockBefore < qty) {
-                let deficit = window.Utils.round4(qty - Math.max(0, stockBefore));
+                let deficit = window.Utils.round4(qty - stockBefore);
                 let unpackRes = this.runAutoUnpack(prod.id, deficit, products, { maxDepth: 5 });
                 if (unpackRes.events && unpackRes.events.length > 0) {
                     allUnpackEvents.push(...unpackRes.events);
                     unpackRes.events.forEach(ev => {
-                        let prevDelta = touchedProductIds.get(String(ev.parentId)) || 0;
-                        touchedProductIds.set(String(ev.parentId), window.Utils.round4(prevDelta - ev.parentsOpened));
+                        let prevParentDelta = touchedProductIds.get(String(ev.parentId)) || 0;
+                        touchedProductIds.set(String(ev.parentId), window.Utils.round4(prevParentDelta - (parseFloat(ev.parentsOpened) || 0)));
+                        let prevChildDelta = touchedProductIds.get(String(ev.childId)) || 0;
+                        touchedProductIds.set(String(ev.childId), window.Utils.round4(prevChildDelta + (parseFloat(ev.childQtyAdded) || 0)));
                     });
                 }
             }
@@ -3998,23 +4413,70 @@ window.DB = {
         return item;
     },
 
+    updateCustomerVoucher: function(voucherId, patchObj) {
+        let list = this.getCustomerVouchers(true);
+        let target = String(voucherId);
+        let idx = list.findIndex(v => v && (String(v.id) === target || String(v.rawTreasuryId || '') === target));
+        if (idx === -1) return null;
+        let now = getServerNow();
+        let prev = list[idx];
+        let normDate = window.Utils.normalizeDateStr(patchObj.date || prev.date, patchObj.timestamp || prev.timestamp);
+
+        let nextAllocated = Array.isArray(patchObj.allocatedInvoices)
+            ? patchObj.allocatedInvoices
+            : (Math.abs((parseFloat(patchObj.amount) || prev.amount) - (parseFloat(prev.amount) || 0)) > 0.009 && Array.isArray(prev.allocatedInvoices) && prev.allocatedInvoices.length > 1
+                ? []
+                : (prev.allocatedInvoices || []));
+
+        let updated = {
+            ...prev,
+            ...patchObj,
+            id: prev.id,
+            amount: window.Utils.round2(patchObj.amount ?? prev.amount),
+            allocatedInvoices: nextAllocated,
+            date: normDate,
+            timestamp: window.Utils.alignTimestampWithDate(normDate, patchObj.timestamp || prev.timestamp),
+            _lastModified: now,
+            _lastModifiedBy: myDeviceName
+        };
+        list[idx] = updated;
+        _internalSetItem('seraj_customer_vouchers', JSON.stringify(list));
+        addToSyncQueue('customer_vouchers', updated);
+        this.calculateCustomerBalances(updated.customerId);
+        emitSerajUpdate('customer_vouchers', 'local');
+        return updated;
+    },
+
     deleteCustomerVoucher: function(voucherId) {
         let list = this.getCustomerVouchers(true);
         let target = String(voucherId);
         let now = getServerNow();
         let found = null;
+        let deletedKeys = new Set([target]);
         list.forEach(v => {
             if (v && (String(v.id) === target || String(v.rawTreasuryId || '') === target)) {
                 v.isDeleted = true;
                 v.isCanceled = true;
                 v._lastModified = now;
                 v._lastModifiedBy = myDeviceName;
+                deletedKeys.add(String(v.id));
+                if (v.rawTreasuryId) deletedKeys.add(String(v.rawTreasuryId));
                 found = v;
             }
         });
         if (found) {
             _internalSetItem('seraj_customer_vouchers', JSON.stringify(list));
             addToSyncQueue('customer_vouchers', found);
+            let rawCusts = safeParseJSON(localStorage.getItem('seraj_customers'), []);
+            let cModified = false;
+            rawCusts.forEach(c => {
+                if (c && Array.isArray(c.transactions)) {
+                    let before = c.transactions.length;
+                    c.transactions = c.transactions.filter(t => t && !deletedKeys.has(String(t.id)) && !deletedKeys.has(String(t.rawTreasuryId || '')));
+                    if (c.transactions.length !== before) cModified = true;
+                }
+            });
+            if (cModified) _internalSetItem('seraj_customers', JSON.stringify(rawCusts));
             emitSerajUpdate('customer_vouchers', 'delete');
         }
         return Boolean(found);
@@ -4125,6 +4587,18 @@ window.DB = {
         if (found) {
             _internalSetItem('seraj_supplier_vouchers', JSON.stringify(list));
             addToSyncQueue('supplier_vouchers', found);
+            let delKeys = new Set([target, String(found.id)]);
+            if (found.rawTreasuryId) delKeys.add(String(found.rawTreasuryId));
+            let rawSupps = safeParseJSON(localStorage.getItem('seraj_suppliers'), []);
+            let sModified = false;
+            rawSupps.forEach(s => {
+                if (s && Array.isArray(s.transactions)) {
+                    let before = s.transactions.length;
+                    s.transactions = s.transactions.filter(t => t && !delKeys.has(String(t.id)) && !delKeys.has(String(t.rawTreasuryId || '')));
+                    if (s.transactions.length !== before) sModified = true;
+                }
+            });
+            if (sModified) _internalSetItem('seraj_suppliers', JSON.stringify(rawSupps));
             emitSerajUpdate('supplier_vouchers', 'delete');
         }
         return Boolean(found);
@@ -4198,7 +4672,8 @@ window.DB = {
         let invIdStr = String(inv.id);
         let invNoStr = String(inv.invoiceNo || inv.id);
         let escapedId = invIdStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        let exactNoteRegex = new RegExp(`(?:\\(فاتورة\\s*${escapedId}\\)|سداد فواتير:[^\\n]*\\b${escapedId}\\b)`);
+        // قصر مطابقة النص على السند أحادي الفاتورة فقط لمنع مضاعفة سند متعدد الفواتير عند إعادة توزيعه بـ FIFO
+        let exactNoteRegex = new RegExp(`\\(فاتورة\\s*${escapedId}\\)`);
 
         validTransactions.forEach(t => {
             if (!t) return;
@@ -4225,7 +4700,16 @@ window.DB = {
         let eIdStr = String(entity.id);
         let eNorm = window.Utils.normalizeName(entity.name || '');
 
-        let standaloneVouchers = isSupplier ? this.getSupplierVouchers(false) : this.getCustomerVouchers(false);
+        let allStandaloneVouchers = isSupplier ? this.getSupplierVouchers(true) : this.getCustomerVouchers(true);
+        let deletedVoucherIds = new Set();
+        allStandaloneVouchers.forEach(v => {
+            if (v && (v.isDeleted || v.isCanceled || v.status === 'deleted')) {
+                if (v.id !== undefined && v.id !== null) deletedVoucherIds.add(String(v.id).trim());
+                if (v.rawTreasuryId) deletedVoucherIds.add(String(v.rawTreasuryId).trim());
+            }
+        });
+
+        let standaloneVouchers = allStandaloneVouchers.filter(v => v && !v.isDeleted && !v.isCanceled && v.status !== 'deleted');
         let entityStandalone = standaloneVouchers.filter(v => {
             if (!v) return false;
             let vEntityId = isSupplier ? v.supplierId : v.customerId;
@@ -4234,7 +4718,7 @@ window.DB = {
         });
 
         let embeddedTx = Array.isArray(entity.transactions)
-            ? entity.transactions.filter(t => t && t.type !== 'log' && !t.isCanceled && t.status !== 'deleted' && !t.isDeleted)
+            ? entity.transactions.filter(t => t && t.type !== 'log' && !t.isCanceled && t.status !== 'deleted' && !t.isDeleted && !deletedVoucherIds.has(String(t.id ?? '').trim()) && !deletedVoucherIds.has(String(t.rawTreasuryId ?? '').trim()))
             : [];
 
         let validTransactions = [];
@@ -4243,8 +4727,7 @@ window.DB = {
         const registerVoucher = (t) => {
             let tId = String(t.id ?? '').trim();
             let tRawId = String(t.rawTreasuryId ?? '').trim();
-            if (tId && recordedTxIds.has(tId)) return;
-            if (tRawId && recordedTxIds.has(tRawId)) return;
+            if ((tId && (recordedTxIds.has(tId) || deletedVoucherIds.has(tId))) || (tRawId && (recordedTxIds.has(tRawId) || deletedVoucherIds.has(tRawId)))) return;
 
             let normDate = window.Utils.normalizeDateStr(t.date, t.timestamp);
             let copy = {
@@ -4269,10 +4752,10 @@ window.DB = {
             let mIdStr = String(m.rawTreasuryId || m.id || '').trim();
             let mShortId = mIdStr.length > 10 ? mIdStr.slice(-6) : mIdStr;
             // لا نستخدم m.invoiceNo مطلقاً كمفتاح استبعاد حتى لا تضيع السندات الجزئية المتعددة
-            if ((mIdStr && recordedTxIds.has(mIdStr)) || (mShortId && recordedTxIds.has(mShortId))) return;
+            if ((mIdStr && (recordedTxIds.has(mIdStr) || deletedVoucherIds.has(mIdStr))) || (mShortId && (recordedTxIds.has(mShortId) || deletedVoucherIds.has(mShortId)))) return;
 
             if (isSupplier) {
-                if (!['suppliers', 'purchase_payment', 'supplier_receipt', 'payment', 'receipt'].includes(m.type) || (!m.supplierId && !m.supplier && !m.supplierName)) return;
+                if (!['suppliers', 'supplier_payment', 'purchase_payment', 'supplier_receipt', 'payment', 'receipt'].includes(m.type) || (!m.supplierId && !m.supplier && !m.supplierName)) return;
             } else {
                 if (!['customers', 'customer_receipt', 'customer_payment', 'receipt', 'payment'].includes(m.type) || (!m.customerId && !m.customer && !m.customerName)) return;
             }
@@ -4294,7 +4777,7 @@ window.DB = {
                 let cleanNotes = String(m.notes || '').replace(/^سند\s+(?:تحصيل|سحب|دفع|مورد|تسديد|إضافة مديونية)\s+رقم\s+[^:]+:\s*[^-]+-\s*/, '').trim();
                 let normMoveNotes = window.Utils.normalizeName(cleanNotes);
                 let txType = isSupplier
-                    ? (ded > 0 || m.type === 'purchase_payment' ? 'payment' : 'receipt')
+                    ? (ded > 0 || m.type === 'purchase_payment' || m.type === 'supplier_payment' ? 'payment' : 'receipt')
                     : (add > 0 || m.type === 'customer_receipt' ? 'receipt' : 'payment');
                 let mVault = m.vault || m.treasury || 'main';
                 let mTs = Number(m.timestamp || 0);
@@ -4570,7 +5053,7 @@ window.DB = {
                 let ded = parseFloat(m.amountDeduct) || 0;
                 let rawAmt = parseFloat(m.amount) || 0;
                 if (add === 0 && ded === 0 && rawAmt > 0) {
-                    let isOut = (m.direction === 'out' || ['payment', 'purchase', 'purchases', 'purchase_payment', 'expenses', 'expense', 'return_sale', 'sales_return'].includes(m.type));
+                    let isOut = (m.direction === 'out' || ['payment', 'customer_payment', 'supplier_payment', 'purchase', 'purchases', 'purchase_payment', 'expenses', 'expense', 'return_sale', 'sales_return'].includes(m.type));
                     if (isOut) m.amountDeduct = rawAmt;
                     else m.amountAdd = rawAmt;
                     movesChanged = true;
@@ -4595,6 +5078,209 @@ window.DB = {
     getProducts: function(includeArchived = false) {
         let products = safeParseJSON(localStorage.getItem('seraj_products'), []);
         return includeArchived ? products : products.filter(p => p && !p.isArchived && !p.isDeleted);
+    },
+
+    // فحص ارتباطات الصنف (رصيد، أصناف فرعية مرتبطة، فواتير مبيعات ومشتريات تاريخية) قبل الأرشفة أو الحذف النهائي
+    inspectProductDependencies: function(productId) {
+        let allProducts = this.getProducts(true);
+        let pidStr = String(productId ?? '');
+        let product = allProducts.find(p => p && String(p.id) === pidStr) || null;
+        if (!product) return null;
+
+        let stock = (Array.isArray(product.lots) && product.lots.length > 0)
+            ? window.Utils.round4(product.lots.reduce((sum, l) => sum + (parseFloat(l?.stock) || 0), 0))
+            : window.Utils.round4(product.stock ?? product.qty ?? 0);
+        let hasStock = window.Utils.isNonZeroStock(stock);
+
+        let linkedChildren = allProducts.filter(other => {
+            if (!other || other.isArchived || other.isDeleted || String(other.id) === pidStr) return false;
+            let parentRef = other.parentProductId || other.autoParentId || other.parentId || other.linkedParentId;
+            return parentRef !== undefined && parentRef !== null && String(parentRef) === pidStr;
+        }).map(c => ({ id: c.id, name: c.name || String(c.id) }));
+
+        let normProdName = window.Utils.normalizeName(product.name || '');
+        const matchesLine = (it) => {
+            if (!it) return false;
+            if (it.id !== undefined && it.id !== null && String(it.id) === pidStr) return true;
+            if (it.productId !== undefined && it.productId !== null && String(it.productId) === pidStr) return true;
+            if (normProdName && it.name && window.Utils.normalizeName(it.name) === normProdName) return true;
+            return false;
+        };
+
+        let salesInvoices = this.getSalesInvoices(true) || [];
+        let purchaseInvoices = this.getPurchaseInvoices(true) || [];
+        let salesCount = 0;
+        let missingCostSalesCount = 0;
+        let purchasesCount = 0;
+
+        salesInvoices.forEach(inv => {
+            if (!inv || !Array.isArray(inv.items)) return;
+            let matchedLines = inv.items.filter(matchesLine);
+            if (matchedLines.length > 0) {
+                salesCount++;
+                if (matchedLines.some(it => !(parseFloat(it.weightedUnitCost ?? it.purchasePrice ?? it.buyPrice) > 0) || !it.name)) {
+                    missingCostSalesCount++;
+                }
+            }
+        });
+
+        purchaseInvoices.forEach(inv => {
+            if (!inv || !Array.isArray(inv.items)) return;
+            if (inv.items.some(matchesLine)) purchasesCount++;
+        });
+
+        let canDeletePerm = window.SerajAuth && typeof window.SerajAuth.canAccess === 'function'
+            ? window.SerajAuth.canAccess('delete_product')
+            : true;
+        let isOwner = window.SerajAuth && typeof window.SerajAuth.isOwner === 'function'
+            ? window.SerajAuth.isOwner()
+            : true;
+
+        return {
+            product,
+            stock: hasStock ? stock : 0,
+            hasStock,
+            linkedChildren,
+            salesCount,
+            purchasesCount,
+            missingCostSalesCount,
+            canArchive: canDeletePerm && !hasStock,
+            canHardDelete: isOwner && canDeletePerm && !hasStock && linkedChildren.length === 0
+        };
+    },
+
+    // تجميد اسم الصنف وتكلفته التاريخية داخل كل الفواتير قبل الحذف النهائي لحماية تقارير الأرباح
+    freezeProductCostInInvoices: function(productObj) {
+        if (!productObj) return { salesUpdated: 0, purchasesUpdated: 0 };
+        let pidStr = String(productObj.id ?? '');
+        let normProdName = window.Utils.normalizeName(productObj.name || '');
+        let round2 = window.Utils.round2;
+        let round4 = window.Utils.round4;
+
+        let fallbackCost = round2(productObj.purchasePrice ?? productObj.buyPrice ?? productObj._lastValidPurchase ?? 0);
+        if (fallbackCost <= 0 && Array.isArray(productObj.lots) && productObj.lots.length > 0) {
+            for (let i = productObj.lots.length - 1; i >= 0; i--) {
+                let lc = round2(productObj.lots[i]?.purchasePrice ?? productObj.lots[i]?.buyPrice ?? 0);
+                if (lc > 0) { fallbackCost = lc; break; }
+            }
+        }
+
+        const matchesLine = (it) => {
+            if (!it) return false;
+            if (it.id !== undefined && it.id !== null && String(it.id) === pidStr) return true;
+            if (it.productId !== undefined && it.productId !== null && String(it.productId) === pidStr) return true;
+            if (normProdName && it.name && window.Utils.normalizeName(it.name) === normProdName) return true;
+            return false;
+        };
+
+        let salesUpdated = 0;
+        let salesList = this.getSalesInvoices(true) || [];
+        salesList.forEach(inv => {
+            if (!inv || !Array.isArray(inv.items)) return;
+            let invChanged = false;
+            inv.items.forEach(it => {
+                if (!matchesLine(it)) return;
+                if (!it.name && productObj.name) { it.name = productObj.name; invChanged = true; }
+                let qty = Math.abs(round4(it.qty ?? it.quantity ?? 0));
+                let existingCost = round2(it.weightedUnitCost ?? it.purchasePrice ?? it.buyPrice ?? it.costPrice ?? 0);
+                let frozenUnitCost = existingCost > 0 ? existingCost : fallbackCost;
+                if (frozenUnitCost > 0) {
+                    if (!(parseFloat(it.purchasePrice) > 0)) { it.purchasePrice = frozenUnitCost; invChanged = true; }
+                    if (!(parseFloat(it.weightedUnitCost) > 0)) { it.weightedUnitCost = frozenUnitCost; invChanged = true; }
+                    if (!(parseFloat(it.cogsTotal) > 0) && qty > 0) { it.cogsTotal = round2(qty * frozenUnitCost); invChanged = true; }
+                }
+                if (!it._frozenDeletedProduct) { it._frozenDeletedProduct = true; invChanged = true; }
+            });
+            if (invChanged) salesUpdated++;
+        });
+        if (salesUpdated > 0) {
+            this.saveSalesInvoices(salesList, { source: 'customers', skipTreasuryDiff: true });
+        }
+
+        let purchasesUpdated = 0;
+        let purchList = this.getPurchaseInvoices(true) || [];
+        purchList.forEach(inv => {
+            if (!inv || !Array.isArray(inv.items)) return;
+            let invChanged = false;
+            inv.items.forEach(it => {
+                if (!matchesLine(it)) return;
+                if (!it.name && productObj.name) { it.name = productObj.name; invChanged = true; }
+                let existingBuy = round2(it.purchasePrice ?? it.buyPrice ?? 0);
+                if (existingBuy <= 0 && fallbackCost > 0) {
+                    it.purchasePrice = fallbackCost;
+                    it.buyPrice = fallbackCost;
+                    invChanged = true;
+                }
+                if (!it._frozenDeletedProduct) { it._frozenDeletedProduct = true; invChanged = true; }
+            });
+            if (invChanged) purchasesUpdated++;
+        });
+        if (purchasesUpdated > 0) {
+            this.savePurchaseInvoices(purchList, null, { source: 'suppliers', skipTreasuryDiff: true });
+        }
+
+        return { salesUpdated, purchasesUpdated };
+    },
+
+    // أرشفة الصنف (إخفاء ناعم مع الاحتفاظ بالصورة لإمكانية إعادة التنشيط عند الشراء)
+    archiveProduct: function(productId) {
+        if (window.SerajAuth && typeof window.SerajAuth.canAccess === 'function' && !window.SerajAuth.canAccess('delete_product')) {
+            return { ok: false, reason: 'forbidden', message: '⛔ هذه العملية مخصصة لصاحب المحل (المالك) فقط.' };
+        }
+        let info = this.inspectProductDependencies(productId);
+        if (!info || !info.product) return { ok: false, reason: 'not_found', message: 'لم يتم العثور على الصنف.' };
+        if (info.hasStock) {
+            return { ok: false, reason: 'non_zero_stock', message: `⚠️ يمنع أرشفة صنف رصيده غير مصفّر (${info.stock.toFixed(2)})! قم بتسوية الرصيد إلى 0.00 أولاً.` };
+        }
+        let ok = this.deleteItem('products', info.product.id, 'soft');
+        return { ok: Boolean(ok), mode: 'archive' };
+    },
+
+    // الحذف النهائي للصنف (للمالك فقط، بعد فحص التبعيات وتجميد التكاليف في الفواتير التاريخية ومسح الصورة وحذف السحابة)
+    hardDeleteProduct: async function(productId) {
+        if (window.SerajAuth && (!window.SerajAuth.isOwner() || !window.SerajAuth.canAccess('delete_product'))) {
+            return { ok: false, reason: 'forbidden', message: '⛔ الحذف النهائي للأصناف مخصص لصاحب المحل (المالك) فقط.' };
+        }
+        let info = this.inspectProductDependencies(productId);
+        if (!info || !info.product) {
+            return { ok: false, reason: 'not_found', message: 'لم يتم العثور على الصنف.' };
+        }
+        if (info.hasStock) {
+            return { ok: false, reason: 'non_zero_stock', message: `⚠️ يمنع حذف صنف رصيده غير مصفّر (${info.stock.toFixed(2)})! قم بتسوية الرصيد إلى 0.00 أولاً.` };
+        }
+        if (info.linkedChildren.length > 0) {
+            let names = info.linkedChildren.map(c => c.name).join('، ');
+            return { ok: false, reason: 'linked_children', message: `⛔ لا يمكن حذف هذا الصنف نهائياً لأنه مرتبط كصنف رئيسي (فك كراتين) للأصناف التالية: ${names}. فك الارتباط أولاً.` };
+        }
+
+        let targetProd = info.product;
+        let frozenStats = this.freezeProductCostInInvoices(targetProd);
+
+        let allProducts = safeParseJSON(localStorage.getItem('seraj_products'), []);
+        let pidStr = String(targetProd.id);
+        let cloudKey = _getDocCloudKey(targetProd);
+        let remaining = allProducts.filter(p => p && String(p.id) !== pidStr);
+        let remainingStr = JSON.stringify(remaining);
+
+        _internalSetItem('seraj_products', remainingStr);
+        localCollectionsCache['products'] = [...remaining];
+
+        if (!window.SerajAuth.isOfflineSinglePlan()) {
+            _internalSetItem('seraj_cloud_cache_products', remainingStr);
+            enqueueOutboxOp('products', cloudKey, 'delete', null, true);
+        }
+
+        if (window.SerajMegaDB && typeof window.SerajMegaDB.set === 'function') {
+            await window.SerajMegaDB.set('seraj_products', remainingStr);
+        }
+        if (window.ImagesDB && typeof window.ImagesDB.deleteImage === 'function') {
+            await window.ImagesDB.deleteImage(pidStr);
+        }
+        if (typeof SmartVoice !== 'undefined' && typeof SmartVoice._invalidateShadowCache === 'function') {
+            SmartVoice._invalidateShadowCache();
+        }
+        emitSerajUpdate('products', 'delete');
+        return { ok: true, mode: 'hard', frozenStats };
     },
 
     saveProducts: function(data) {
@@ -5493,8 +6179,9 @@ window.DB = {
                 ? (isPaymentReduceDebt ? `سند سداد لمورد رقم ${safeVId}` : `سند استلام من مورد رقم ${safeVId}`)
                 : (isPaymentReduceDebt ? `سند تحصيل نقدية رقم ${safeVId}` : `سند مديونية رقم ${safeVId}`);
 
-            let safeDev = esc(t._device || '');
-            let safeModBy = esc(t._lastModifiedBy || '');
+            let isOfflineSingle = window.SerajAuth && window.SerajAuth.isOfflineSinglePlan();
+            let safeDev = isOfflineSingle ? '' : esc(t._device || '');
+            let safeModBy = isOfflineSingle ? '' : esc(t._lastModifiedBy || '');
             let editTag = (safeModBy && safeDev && safeModBy !== safeDev) ? `✏️ تعديل: ${safeModBy}` : '';
             let devName = safeDev ? `<br><span style="font-size:11px; color:#38bdf8;">💻 سُجل بواسطة: ${safeDev} ${editTag}</span>` : '';
 
@@ -6506,7 +7193,7 @@ window.DB = {
                 let ded = round2(cleanM.amountDeduct);
                 let rawAmt = round2(cleanM.amount);
                 if (add === 0 && ded === 0 && rawAmt > 0) {
-                    let isOut = (cleanM.direction === 'out' || ['payment', 'purchase', 'purchases', 'purchase_payment', 'expenses', 'expense', 'return_sale', 'sales_return'].includes(cleanM.type));
+                    let isOut = (cleanM.direction === 'out' || ['payment', 'customer_payment', 'supplier_payment', 'purchase', 'purchases', 'purchase_payment', 'expenses', 'expense', 'return_sale', 'sales_return'].includes(cleanM.type));
                     if (isOut) cleanM.amountDeduct = rawAmt;
                     else cleanM.amountAdd = rawAmt;
                 }
@@ -6581,7 +7268,7 @@ window.DB = {
         this._isSavingVaults = true;
         try {
             _internalSetItem('seraj_vaults_v2', newStr);
-            if (cloudReady && navigator.onLine && !window.SerajAuth.isOfflineSinglePlan()) {
+            if (cloudReady && navigator.onLine && !window.SerajAuth.isOfflineSinglePlan() && window.SerajAuth.isOwner()) {
                 let ref = _getStoreCloudRef('vaults_v2');
                 if (ref) ref.set(cleanVaults).catch(() => {});
             }
@@ -6625,7 +7312,7 @@ window.DB = {
         let amountDeduct = round2(moveObj.amountDeduct);
         if (amountAdd === 0 && amountDeduct === 0 && moveObj.amount) {
             let rawAmt = round2(moveObj.amount);
-            if (moveObj.direction === 'out' || ['payment', 'purchase', 'purchases', 'purchase_payment', 'expenses', 'expense', 'return_sale', 'sales_return'].includes(moveObj.type)) {
+            if (moveObj.direction === 'out' || ['payment', 'customer_payment', 'supplier_payment', 'purchase', 'purchases', 'purchase_payment', 'expenses', 'expense', 'return_sale', 'sales_return'].includes(moveObj.type)) {
                 amountDeduct = rawAmt;
             } else {
                 amountAdd = rawAmt;
@@ -6740,13 +7427,19 @@ window.DB = {
         let sales = this.getSalesInvoices(false);
         let purchases = this.getPurchaseInvoices(false);
         let expenses = this.getExpenses(false);
-        let products = this.getProducts(false);
+        let allProductsForCost = this.getProducts(true);
+        let products = allProductsForCost.filter(p => p && !p.isArchived && !p.isDeleted);
         let vaults = this.getVaults();
         let customers = this.getCustomers(false, false);
         let suppliers = this.getSuppliers(false, false);
 
         let prodById = new Map();
-        products.forEach(p => { if (p) prodById.set(String(p.id), p); });
+        let prodByNorm = new Map();
+        allProductsForCost.forEach(p => {
+            if (!p) return;
+            if (p.id !== undefined && p.id !== null) prodById.set(String(p.id), p);
+            if (p.name) prodByNorm.set(window.Utils.normalizeName(p.name), p);
+        });
 
         let grossSales = 0;
         let salesDiscounts = 0;
@@ -6769,10 +7462,21 @@ window.DB = {
                 if (!it) return;
                 let qty = round4(it.qty ?? it.quantity ?? 0);
                 if (qty <= 0) return;
-                let unitCost = round2(it.weightedUnitCost ?? it.purchasePrice ?? 0);
-                if (unitCost <= 0 && it.id !== undefined) {
-                    let p = prodById.get(String(it.id));
-                    if (p) unitCost = round2(p.purchasePrice || p._lastValidPurchase || 0);
+                let unitCost = round2(it.weightedUnitCost ?? it.purchasePrice ?? it.buyPrice ?? it.costPrice ?? 0);
+                if (unitCost <= 0) {
+                    let pRef = (it.id !== undefined && it.id !== null)
+                        ? prodById.get(String(it.id))
+                        : (it.productId !== undefined && it.productId !== null ? prodById.get(String(it.productId)) : null);
+                    if (!pRef && it.name) pRef = prodByNorm.get(window.Utils.normalizeName(it.name));
+                    if (pRef) {
+                        unitCost = round2(pRef.purchasePrice || pRef.buyPrice || pRef._lastValidPurchase || 0);
+                        if (unitCost <= 0 && Array.isArray(pRef.lots) && pRef.lots.length > 0) {
+                            for (let li = pRef.lots.length - 1; li >= 0; li--) {
+                                let lc = round2(pRef.lots[li]?.purchasePrice || pRef.lots[li]?.buyPrice || 0);
+                                if (lc > 0) { unitCost = lc; break; }
+                            }
+                        }
+                    }
                 }
                 let lineCost = (it.cogsTotal !== undefined && it.cogsTotal > 0) ? round2(it.cogsTotal) : round2(qty * unitCost);
                 invCost = round2(invCost + lineCost);
@@ -6836,17 +7540,8 @@ window.DB = {
             }
         });
 
-        // دمج ملخص الفواتير المؤرشفة إذا كان الفلتر "الكل" (allTime)
-        let archivedSummary = safeParseJSON(localStorage.getItem('seraj_archived_financial_summary'), null);
-        let archivedSalesAdded = 0;
-        let archivedCOGSAdded = 0;
-        if (!startStr && !endStr && archivedSummary && typeof archivedSummary === 'object') {
-            archivedSalesAdded = round2(archivedSummary.netSales || 0);
-            archivedCOGSAdded = round2(archivedSummary.totalCOGS || 0);
-        }
-
-        let netSales = round2((grossSales - salesReturnsTotal) + archivedSalesAdded);
-        let netCOGS = round2((salesCOGS - salesReturnsCOGS) + archivedCOGSAdded);
+        let netSales = round2(grossSales - salesReturnsTotal);
+        let netCOGS = round2(salesCOGS - salesReturnsCOGS);
         let grossProfit = round2(netSales - netCOGS);
         let netProfit = round2(grossProfit - totalExpenses);
         let netPurchases = round2(grossPurchases - purchaseReturnsTotal);
@@ -6972,7 +7667,7 @@ window.DB = {
             },
             shortages,
             supplierOrders: Object.values(supplierOrders),
-            archivedIncluded: archivedSalesAdded > 0
+            archivedIncluded: false
         };
     },
 
@@ -7025,6 +7720,19 @@ window.DB = {
         this._isSavingSmartNotes = true;
 
         try {
+            if (window.SerajAuth.isOfflineSinglePlan()) {
+                let nowLocal = Date.now();
+                let cleanLocalNotes = data.filter(Boolean).map((n, idx) => ({
+                    ...n,
+                    id: String(n.id ?? n.noteId ?? n.timestamp ?? (nowLocal + idx)),
+                    date: window.Utils.normalizeDateStr(n.date, n.timestamp),
+                    _lastModified: n._lastModified || nowLocal
+                }));
+                _internalSetItem('seraj_smart_notes', JSON.stringify(cleanLocalNotes));
+                localCollectionsCache['smart_notes'] = [...cleanLocalNotes];
+                emitSerajUpdate('smart_notes', 'local');
+                return;
+            }
             let oldNotes = safeParseJSON(localStorage.getItem('seraj_cloud_cache_smart_notes'), []);
             let oldMap = new Map(oldNotes.map(n => [String(n?.id), n]));
             let newIds = new Set();
@@ -7072,211 +7780,6 @@ window.DB = {
         }
     },
 
-    // =========================================================================
-    // 20. الأرشفة السحابية الذكية (مع حفظ archived_financial_summary)
-    // =========================================================================
-    archiveSmartData: async function() {
-        if (window.SerajAuth.isOfflineSinglePlan()) {
-            window.SerajAlert('الأرشفة السحابية غير متاحة في باقة الأوفلاين الدائمة.', 'info');
-            return false;
-        }
-        let storeRef = _getStoreCloudRef();
-        if (!cloudReady || !navigator.onLine || !storeRef) {
-            window.SerajAlert('يجب الاتصال بالإنترنت لإجراء الأرشفة السحابية!', 'error');
-            return false;
-        }
-
-        return new Promise((resolve) => {
-            window.SerajConfirm('سيتم أرشفة فواتير البيع النقدية (الطياري - بدون عميل) الأقدم من 7 أيام مع الاحتفاظ بآخر 50 فاتورة طياري، وحفظ أثرها المالي في archived_financial_summary دون المساس بأي عميل أو مورد. هل أنت متأكد؟', async (confirm) => {
-                if (!confirm) return resolve(false);
-
-                showCloudStatus('⏳ جاري أرشفة الفواتير الطياري القديمة...');
-                let now = getServerNow();
-                let days7 = now - (7 * 24 * 60 * 60 * 1000);
-                let round2 = window.Utils.round2;
-
-                let sales = this.getSalesInvoices(true);
-                let moves = this.getTreasuryMoves(true, true);
-                let customers = this.getCustomers(true);
-
-                let registeredCustomerIds = new Set();
-                let registeredCustomerNormNames = new Set();
-                customers.forEach(c => {
-                    if (!c) return;
-                    if (c.id !== undefined && c.id !== null) registeredCustomerIds.add(String(c.id));
-                    let norm = window.Utils.normalizeName(c.name || '');
-                    if (norm) registeredCustomerNormNames.add(norm);
-                });
-
-                let archivePayload = { sales: {} };
-                let newSales = [];
-                let sortedSales = [...sales].sort((a, b) => {
-                    let diff = window.Utils.getSafeTime(b.timestamp || b.date) - window.Utils.getSafeTime(a.timestamp || a.date);
-                    if (diff !== 0) return diff;
-                    return window.Utils.extractSerialNum(b.id) - window.Utils.extractSerialNum(a.id);
-                });
-
-                let anonymousCount = 0;
-                sortedSales.forEach(inv => {
-                    if (!inv) return;
-                    let t = window.Utils.getSafeTime(inv.date || inv.timestamp);
-                    let remVal = inv.calculatedRemaining !== undefined ? parseFloat(inv.calculatedRemaining) : (parseFloat(inv.remaining) || 0);
-                    let initRemVal = parseFloat(inv.initialRemaining) || 0;
-
-                    let custName = String(inv.customer || inv.customerName || '').trim();
-                    let custNorm = window.Utils.normalizeName(custName);
-                    let hasCustomerId = (inv.customerId !== undefined && inv.customerId !== null && String(inv.customerId).trim() !== '');
-                    let isRegisteredCustomer = (hasCustomerId && registeredCustomerIds.has(String(inv.customerId))) || (custNorm !== '' && registeredCustomerNormNames.has(custNorm));
-                    let isWalkInName = (!custName || ['عميل نقدي', 'عميل طياري', 'طياري', 'نقدي', 'بدون اسم', '---'].includes(custName));
-                    let isAnonymousCash = !hasCustomerId && !isRegisteredCustomer && isWalkInName && Math.abs(remVal) <= 0.01 && Math.abs(initRemVal) <= 0.01;
-
-                    if (isAnonymousCash) {
-                        anonymousCount++;
-                        if (anonymousCount <= 50 || t >= days7) newSales.push(inv);
-                        else archivePayload.sales[inv.id] = inv;
-                    } else {
-                        newSales.push(inv);
-                    }
-                });
-
-                let archivedList = Object.values(archivePayload.sales);
-                if (archivedList.length === 0) {
-                    window.SerajAlert('ℹ️ لا توجد فواتير طياري قديمة تحتاج للأرشفة حالياً.', 'info');
-                    return resolve(false);
-                }
-
-                this._updateInvoiceCountersFromList('sales', sales, true);
-
-                // حساب وتحديث archived_financial_summary قبل الأرشفة
-                let prevSummary = safeParseJSON(localStorage.getItem('seraj_archived_financial_summary'), { netSales: 0, totalCOGS: 0, invoicesCount: 0, updatedAt: 0 });
-                let addedNetSales = 0;
-                let addedCOGS = 0;
-                let archivedVaultDelta = { main: 0, insta: 0, wallet: 0 };
-
-                archivedList.forEach(inv => {
-                    if (!inv || inv.isCanceled || inv.type === 'canceled' || inv.type === 'quotation' || inv.isDeleted) return;
-                    let isReturn = ['return', 'return_sale', 'sales_return'].includes(inv.type);
-                    let netVal = this._computeInvoiceNetTotal(inv);
-                    let invCost = (Array.isArray(inv.items) ? inv.items : []).reduce((s, it) => {
-                        let q = parseFloat(it?.qty ?? it?.quantity ?? 0) || 0;
-                        let c = parseFloat(it?.weightedUnitCost ?? it?.purchasePrice ?? 0) || 0;
-                        return s + (it?.cogsTotal ? parseFloat(it.cogsTotal) : (q * c));
-                    }, 0);
-
-                    addedNetSales = round2(addedNetSales + (isReturn ? -netVal : netVal));
-                    addedCOGS = round2(addedCOGS + (isReturn ? -invCost : invCost));
-
-                    if (!this._hasTreasuryMoveForInvoice(inv, moves, 'sales')) {
-                        let checkoutPaid = (inv.initialPaid !== undefined && inv.initialPaid !== null) ? parseFloat(inv.initialPaid) : (parseFloat(inv.paid) || 0);
-                        if (checkoutPaid > 0) {
-                            let vKey = inv.vault || inv.treasury || 'main';
-                            if (archivedVaultDelta[vKey] === undefined) vKey = 'main';
-                            archivedVaultDelta[vKey] = round2(archivedVaultDelta[vKey] + (isReturn ? -checkoutPaid : checkoutPaid));
-                        }
-                    }
-                });
-
-                let nextSummary = {
-                    netSales: round2((prevSummary.netSales || 0) + addedNetSales),
-                    totalCOGS: round2((prevSummary.totalCOGS || 0) + addedCOGS),
-                    invoicesCount: (prevSummary.invoicesCount || 0) + archivedList.length,
-                    updatedAt: now
-                };
-
-                let movesModified = false;
-                ['main', 'insta', 'wallet'].forEach(vKey => {
-                    let delta = round2(archivedVaultDelta[vKey]);
-                    if (Math.abs(delta) < 0.01) return;
-                    movesModified = true;
-                    let existingArchMove = moves.find(m => m && String(m.id) === `arch_bal_${vKey}`);
-                    if (existingArchMove) {
-                        let netNow = round2((round2(existingArchMove.amountAdd) - round2(existingArchMove.amountDeduct)) + delta);
-                        existingArchMove.amountAdd = netNow >= 0 ? netNow : 0;
-                        existingArchMove.amountDeduct = netNow < 0 ? Math.abs(netNow) : 0;
-                        existingArchMove.amount = Math.abs(netNow);
-                        existingArchMove._lastModified = now;
-                    } else {
-                        moves.push({
-                            id: `arch_bal_${vKey}`,
-                            _cloudKey: `arch_bal_${vKey}`,
-                            type: 'direct',
-                            vault: vKey,
-                            treasury: vKey,
-                            amountAdd: delta >= 0 ? delta : 0,
-                            amountDeduct: delta < 0 ? Math.abs(delta) : 0,
-                            amount: Math.abs(delta),
-                            notes: 'رصيد فواتير طياري مرحلة للأرشيف السحابي',
-                            date: window.Utils.getLocalDateString(days7),
-                            timestamp: days7,
-                            _device: myDeviceName,
-                            _lastModified: now,
-                            _lastModifiedBy: myDeviceName
-                        });
-                    }
-                });
-
-                try {
-                    let currentYear = new Date().getFullYear();
-                    let safeArchiveSales = {};
-                    archivedList.forEach(inv => {
-                        let safeKey = _getDocCloudKey(inv);
-                        safeArchiveSales[safeKey] = inv;
-                    });
-
-                    await storeRef.child(`Archive_${currentYear}/sales`).update(safeArchiveSales);
-                    await storeRef.child('archived_financial_summary').set(nextSummary);
-
-                    let deletePatch = {};
-                    archivedList.forEach(inv => {
-                        deletePatch[`sales_invoices/${_getDocCloudKey(inv)}`] = null;
-                    });
-                    await storeRef.update(deletePatch);
-
-                    _internalSetItem('seraj_archived_financial_summary', JSON.stringify(nextSummary));
-                    _internalSetItem('seraj_sales_invoices', JSON.stringify(newSales));
-                    _internalSetItem('seraj_cloud_cache_sales_invoices', JSON.stringify(newSales));
-                    localCollectionsCache['sales_invoices'] = [...newSales];
-
-                    if (movesModified) {
-                        this.saveTreasuryMoves(moves);
-                        await this.syncNow();
-                    }
-
-                    window.SerajAlert(`✅ تمت الأرشفة الآمنة بنجاح! تم ترحيل (${archivedList.length}) فاتورة طياري وحفظ ملخصها المالي.`, 'success', () => {
-                        window.location.reload();
-                    });
-                    resolve(true);
-                } catch (e) {
-                    console.error('Archive Error:', e);
-                    window.SerajAlert('❌ حدث خطأ أثناء الأرشفة السحابية، لم يتم حذف أي بيانات محلية.', 'error');
-                    resolve(false);
-                }
-            });
-        });
-    },
-
-    fetchArchivedData: async function(year = new Date().getFullYear()) {
-        let storeRef = _getStoreCloudRef();
-        if (!cloudReady || !navigator.onLine || !storeRef) {
-            window.SerajAlert('يجب الاتصال بالإنترنت للبحث في الأرشيف!', 'error');
-            return null;
-        }
-        showCloudStatus('⏳ جاري سحب الأرشيف من السحابة...');
-        try {
-            let snap = await storeRef.child('Archive_' + year).once('value');
-            if (snap.exists()) {
-                showCloudStatus('✅ تم جلب الأرشيف بنجاح.');
-                return snap.val();
-            }
-            window.SerajAlert('لا توجد بيانات مؤرشفة مسجلة في هذا العام.', 'info');
-            return null;
-        } catch (e) {
-            console.error(e);
-            window.SerajAlert('حدث خطأ أثناء جلب الأرشيف.', 'error');
-            return null;
-        }
-    },
-
     getAggregatedData: function() {
         return {
             sales: this.getSalesInvoices(true),
@@ -7288,8 +7791,7 @@ window.DB = {
             supplier_vouchers: this.getSupplierVouchers(true),
             treasuryMoves: this.getTreasuryMoves(true, true),
             expenses: this.getExpenses(false),
-            smartNotes: this.getSmartNotes(true),
-            archivedFinancialSummary: safeParseJSON(localStorage.getItem('seraj_archived_financial_summary'), null)
+            smartNotes: this.getSmartNotes(true)
         };
     },
 
@@ -7308,8 +7810,7 @@ window.DB = {
         'seraj_smart_notes',
         'seraj_vaults_v2',
         'seraj_invoice_counters',
-        'seraj_store_settings',
-        'seraj_archived_financial_summary'
+        'seraj_store_settings'
     ],
 
     // بناء حزمة النسخ الاحتياطي Data.json بـ Allowlist صارمة تستبعد seraj_store_id وأي مفاتيح حساسة
@@ -7333,6 +7834,10 @@ window.DB = {
 
     // تصدير ومشاركة Data.json عبر Web Share API (Drive/Gmail/WhatsApp) أو تنزيل مباشر
     exportOfflineDataJSON: async function(preferShare = true) {
+        if (!window.SerajAuth.canAccess('export_backup')) {
+            window.SerajAlert('⛔ تصدير النسخة الاحتياطية مخصص لصاحب المحل (المالك) فقط.', 'error');
+            return false;
+        }
         let backupObj = this.backupData();
         let jsonStr = JSON.stringify(backupObj, null, 2);
         let dateTag = window.Utils.getLocalDateString();
@@ -7370,6 +7875,10 @@ window.DB = {
 
     // تصدير ملف الصور المستقل Images.json (اختياري)
     exportImagesBackupJSON: async function(preferShare = true) {
+        if (!window.SerajAuth.canAccess('export_backup')) {
+            window.SerajAlert('⛔ تصدير نسخ الصور مخصص لصاحب المحل (المالك) فقط.', 'error');
+            return false;
+        }
         showCloudStatus('⏳ جاري تجهيز ملف الصور Images.json...');
         let imgPayload = await window.ImagesDB.exportAllImagesJSON();
         let blob = new Blob([JSON.stringify(imgPayload)], { type: 'application/json;charset=utf-8' });
@@ -7469,10 +7978,9 @@ window.DB = {
                     });
                     cloudPayload.vaults_v2 = this.recalculateVaultBalances(false);
                     cloudPayload.invoice_counters = safeParseJSON(localStorage.getItem('seraj_invoice_counters'), { sales: {}, purchases: {} });
-                    cloudPayload.archived_financial_summary = safeParseJSON(localStorage.getItem('seraj_archived_financial_summary'), null);
+                    _internalSetItem('seraj_system_epoch', String(now));
                     await storeRef.update(cloudPayload);
                     await storeRef.child('meta/system_epoch').set(now);
-                    _internalSetItem('seraj_system_epoch', String(now));
                 } catch (e) {
                     console.error('Restore Cloud Push Error:', e);
                 }
@@ -7510,7 +8018,6 @@ window.DB = {
             localCollectionsCache[col] = [];
         });
         _internalSetItem('seraj_vaults_v2', JSON.stringify({ main: 0, insta: 0, wallet: 0 }));
-        _internalSetItem('seraj_archived_financial_summary', 'null');
         _saveOutbox([]);
 
         if (!window.SerajAuth.isOfflineSinglePlan() && cloudReady && navigator.onLine) {
@@ -7519,13 +8026,12 @@ window.DB = {
                 try {
                     let wipeUpdates = {
                         vaults_v2: { main: 0, insta: 0, wallet: 0 },
-                        archived_financial_summary: null,
                         'meta/system_epoch': now
                     };
                     SYNCED_COLLECTIONS.forEach(col => { wipeUpdates[col] = null; });
                     // ملاحظة دستورية: Store_Backups/{storeId}/snapshots معزول تماماً ولا يُمس أبداً
-                    await storeRef.update(wipeUpdates);
                     _internalSetItem('seraj_system_epoch', String(now));
+                    await storeRef.update(wipeUpdates);
                 } catch (e) {
                     console.error('Wipe Cloud Error:', e);
                 }

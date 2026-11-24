@@ -372,6 +372,9 @@
         async function initSalesPage() {
             await window.SerajMegaDB.ready;
             DB.applySavedTheme();
+            if (window.SerajAuth && typeof window.SerajAuth.applyRoleGuards === 'function') {
+                window.SerajAuth.applyRoleGuards();
+            }
             DB.setActiveVoiceProfile('sales');
             updatePageBranding();
             loadDB();
@@ -819,16 +822,20 @@
 
             const p = productsDB.find(x => x && String(x.id) === String(item.id));
             const slider = document.getElementById('editBatchesSlider');
+            const canSeeBuy = !window.SerajAuth || window.SerajAuth.canAccess('view_purchase_prices');
             let totalStock = 0;
 
             if (p && Array.isArray(p.lots) && p.lots.length > 0) {
                 const cardsHtml = p.lots.map(b => {
                     const st = round4(b.stock);
                     totalStock = round4(totalStock + st);
+                    const priceRow = canSeeBuy
+                        ? `<div>شراء: <span class="val-red">${round2(b.purchasePrice).toFixed(2)}</span> | بيع: <span class="val-green">${round2(b.price).toFixed(2)}</span></div>`
+                        : `<div>سعر البيع: <span class="val-green">${round2(b.price).toFixed(2)}</span></div>`;
                     return `
                         <div class="batch-card" style="background: var(--card-bg-alt); border: 1px solid var(--neon-border-soft); border-radius: 10px; padding: 8px; font-size: 13px; text-align: right;">
                             <div>المصدر: <strong>${safeHTML(b.supplier || b.source || '---')}</strong></div>
-                            <div>شراء: <span class="val-red">${round2(b.purchasePrice).toFixed(2)}</span> | بيع: <span class="val-green">${round2(b.price).toFixed(2)}</span></div>
+                            ${priceRow}
                             <div>التاريخ: ${safeHTML(b.date || '-')} | الكمية: <span class="val-green">${st}</span></div>
                         </div>
                     `;
@@ -838,7 +845,7 @@
                 totalStock = getProductStock(p);
                 slider.innerHTML = `
                     <div class="batch-card" style="background: var(--card-bg-alt); border: 1px solid var(--neon-border-soft); border-radius: 10px; padding: 8px; font-size: 13px; text-align: center;">
-                        شراء: <span class="val-red">${round2(p.purchasePrice).toFixed(2)}</span> | الكمية: <span class="val-green">${totalStock}</span>
+                        ${canSeeBuy ? `شراء: <span class="val-red">${round2(p.purchasePrice).toFixed(2)}</span> | ` : ''}الكمية: <span class="val-green">${totalStock}</span>
                     </div>
                 `;
             } else {
@@ -864,9 +871,15 @@
             const buyCost = round2(invoice[idx].purchasePrice || (p ? getProductPrices(p).purchasePrice : 0));
 
             if (newSellPrice <= 0) {
+                if (window.SerajAuth && !window.SerajAuth.canAccess('view_purchase_prices')) {
+                    return SerajAlert('⛔ لا يمكن البيع بسعر صفر. يرجى مراجعة صاحب المحل (المالك).', 'error');
+                }
                 const okZero = await SerajConfirm('⚠️ تنبيه: سعر البيع يساوي صفراً!\nهل أنت متأكد من المتابعة؟');
                 if (!okZero) return;
             } else if (buyCost > 0 && newSellPrice < buyCost) {
+                if (window.SerajAuth && !window.SerajAuth.canAccess('view_purchase_prices')) {
+                    return SerajAlert('⛔ السعر أقل من الحد الأدنى المسموح به. يرجى مراجعة صاحب المحل (المالك).', 'error');
+                }
                 const okLoss = await SerajConfirm(`⚠️ تنبيه بيع بخسارة: سعر البيع (${newSellPrice.toFixed(2)}) أقل من سعر الشراء (${buyCost.toFixed(2)})!\nهل أنت متأكد من المتابعة؟`);
                 if (!okLoss) return;
             }
@@ -1575,6 +1588,7 @@
             });
 
             setTimeout(() => {
+                try {
                 _releaseBarcodeCameraOnly();
                 html5QrCode = new Html5Qrcode('reader');
                 html5QrCode.start(
@@ -1603,6 +1617,11 @@
                     SerajAlert('يرجى إعطاء صلاحية الكاميرا للمتصفح.', 'error');
                     window.SerajUI.closeModal('scannerModal');
                 });
+                } catch (qrErr) {
+                    console.error('Barcode Init Error:', qrErr);
+                    SerajAlert('تعذر تشغيل الكاميرا لقراءة الباركود.', 'error');
+                    window.SerajUI.closeModal('scannerModal');
+                }
             }, 120);
         }
 

@@ -97,18 +97,6 @@
             color: var(--accent-green);
         }
 
-        .archived-note-banner {
-            display: none;
-            text-align: center;
-            font-size: 13px;
-            font-weight: bold;
-            color: var(--accent-yellow);
-            background-color: var(--card-bg-alt);
-            border: 1.5px dashed var(--neon-border);
-            border-radius: 12px;
-            padding: 10px 12px;
-            margin-bottom: 12px;
-        }
     </style>
 </head>
 <body class="page-records" onclick="closeAllMenus()">
@@ -118,10 +106,6 @@
     </div>
 
     <div class="report-main-wrap" id="pdf-wrapper">
-        <div id="archivedNoteBanner" class="archived-note-banner">
-            📦 يشمل هذا الملخص صافي الفواتير الطياري المرحلة للأرشيف السحابي.
-        </div>
-
         <div class="profit-summary-card">
             <div class="summary-card-title">
                 صافي المبيعات
@@ -349,9 +333,6 @@
             document.getElementById('totalDiscountVal').textContent = salesDiscounts.toFixed(2);
             document.getElementById('netProfitVal').textContent = netProfit.toFixed(2);
             document.getElementById('profitMarginBadge').textContent = `${marginPct.toFixed(2)}%`;
-
-            const archBanner = document.getElementById('archivedNoteBanner');
-            if (archBanner) archBanner.style.display = summary.archivedIncluded ? 'block' : 'none';
 
             const grossBox = document.getElementById('grossProfitBox');
             grossBox.className = `summary-val-box ${grossProfit < 0 ? 'box-cost' : 'box-profit'}`;

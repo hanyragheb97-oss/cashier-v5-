@@ -60,10 +60,19 @@
                     <tr>
                         <th style="width: 45%; text-align: right;">اسم المنتج</th>
                         <th style="width: 25%;">المبيعات</th>
-                        <th style="width: 30%;">إجمالي الأرباح والنسبة</th>
+                        <th style="width: 30%;">الربح ونسبة الربح للتكلفة</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody"></tbody>
+                <tfoot>
+                    <tr id="avgMarginFooter" style="background-color: var(--table-header-bg); border-top: 2px solid var(--neon-border); font-weight: bold;">
+                        <td colspan="3" style="padding: 12px 10px; line-height: 1.8; font-size: 14px;">
+                            إجمالي الربح: <span id="marginTotalProfit" class="val-green" dir="ltr">0.00</span> ج |
+                            للتكلفة: <span id="avgMarkupPct" class="val-yellow" dir="ltr">0.00%</span> |
+                            للمبيعات: <span id="avgSalesMarginPct" class="color-customer" dir="ltr">0.00%</span>
+                        </td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
     </div>
@@ -309,6 +318,21 @@
             lastProductList = productList;
 
             const tbody = document.getElementById('tableBody');
+            let sumSales = 0, sumCost = 0, sumProfit = 0;
+            productList.forEach(x => {
+                sumSales = round2(sumSales + x.sales);
+                sumCost = round2(sumCost + x.cost);
+                sumProfit = round2(sumProfit + x.profit);
+            });
+            const avgMarkup = sumCost > 0.009 ? round2((sumProfit / sumCost) * 100) : (sumSales > 0.009 ? 100 : 0);
+            const avgSalesMargin = sumSales > 0.009 ? round2((sumProfit / sumSales) * 100) : 0;
+            const tpEl = document.getElementById('marginTotalProfit');
+            if (tpEl) tpEl.textContent = sumProfit.toFixed(2);
+            const mkEl = document.getElementById('avgMarkupPct');
+            if (mkEl) mkEl.textContent = avgMarkup.toFixed(2) + '%';
+            const smEl = document.getElementById('avgSalesMarginPct');
+            if (smEl) smEl.textContent = avgSalesMargin.toFixed(2) + '%';
+
             if (productList.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="3" style="padding: 24px; color: var(--text-muted);">لا توجد بيانات في هذه الفترة</td></tr>`;
                 return;

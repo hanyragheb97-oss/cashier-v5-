@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>المحاسب الذكي - سراج كاشير</title>
+    <title>المحاسب الذكي</title>
     
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0b0d1e">
@@ -11,7 +11,7 @@
     
     <!-- الربط بالستايل المركزي للألوان العامة -->
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="./libs/html2pdf.bundle.min.js" defer></script>
     
     <!-- الستايل الخاص بهيكل وتصميم صفحة المحاسب الذكي والكروت الخاصة بها -->
     <style>
@@ -136,11 +136,11 @@
                 <div class="panel-item" onclick="window.location.href='sales_detailed.html'">تقرير مبيعات مفصل</div>
                 <div class="panel-item" onclick="window.location.href='sales_summary.html'">تقرير مبيعات مجمل</div>
                 <div class="panel-item" onclick="window.location.href='sales_unpaid.html'">تقرير فواتير المبيعات غير المسددة</div>
-                <div class="panel-item" onclick="window.location.href='sales_all.html'">سجل فواتير المبيعات (الكل)</div>
+                <div class="panel-item" onclick="window.location.href='history.html?readonly=1&filter=all'">سجل فواتير المبيعات (الكل)</div>
             </div>
 
-            <button class="accordion">الأرباح</button>
-            <div class="panel">
+            <button class="accordion owner-only" data-role="owner">الأرباح</button>
+            <div class="panel owner-only" data-role="owner">
                 <div class="panel-item" onclick="window.location.href='profit_detailed.html'">تقرير أرباح مفصل</div>
                 <div class="panel-item" onclick="window.location.href='profit_summary.html'">تقرير أرباح مجمل</div>
                 <div class="panel-item" onclick="window.location.href='profit_margin.html'">نسبة أرباح المنتجات</div>
@@ -149,7 +149,7 @@
             <button class="accordion">العملاء</button>
             <div class="panel">
                 <div class="panel-item" onclick="window.location.href='customers_debt.html'">تقرير بالمبالغ المتبقية عند العملاء</div>
-                <div class="panel-item" onclick="window.location.href='customer_reports.html'">تقارير حسابات العملاء</div>
+                <div class="panel-item" onclick="window.location.href='customers.html'">تقارير حسابات العملاء</div>
                 <div class="panel-item" onclick="window.location.href='customer_products.html'">تقرير بالمنتجات المباعة لعميل</div>
                 <div class="panel-item" onclick="window.location.href='customer_statement.html'">كشف حساب عميل</div>
             </div>
@@ -168,12 +168,12 @@
                 <div class="panel-item" onclick="window.location.href='purchases_detailed.html'">تقرير مشتريات مفصل</div>
                 <div class="panel-item" onclick="window.location.href='purchases_summary.html'">تقرير مشتريات مجمل</div>
                 <div class="panel-item" onclick="window.location.href='purchases_unpaid.html'">تقرير فواتير المشتريات غير المسددة</div>
-                <div class="panel-item" onclick="window.location.href='purchases_all.html'">فواتير المشتريات (الكل)</div>
+                <div class="panel-item" onclick="window.location.href='purchases_history.html?readonly=1'">فواتير المشتريات (الكل)</div>
             </div>
 
             <button class="accordion">المخزن</button>
             <div class="panel">
-                <div class="panel-item" onclick="window.location.href='inventory_detailed.html'">جرد المخزن مفصل</div>
+                <div class="panel-item owner-only" data-role="owner" onclick="window.location.href='inventory_detailed.html'">جرد المخزن مفصل</div>
                 <div class="panel-item" onclick="window.location.href='inventory_summary.html'">جرد المخزن مجمل</div>
             </div>
             
@@ -183,7 +183,7 @@
                 <div class="panel-item" onclick="window.location.href='expenses_summary.html'">تقرير مصروفات مجمل</div>
             </div>
 
-            <button class="accordion" onclick="window.location.href='treasury.html'">الخزينة (عرض الحركات)</button>
+            <button class="accordion owner-only" data-role="owner" onclick="window.location.href='treasury.html?view=movements'">الخزينة (عرض الحركات)</button>
             
         </div>
 
@@ -195,10 +195,10 @@
             <div class="list-card"><div class="amount" id="col-paid">0.00 <span>ج</span></div><div class="title">المسدد نقداً بالفواتير</div></div>
             <div class="list-card"><div class="amount" id="col-deferred">0.00 <span>ج</span></div><div class="title">المتبقي من الفواتير الآجلة</div></div>
             <div class="list-card"><div class="amount" id="col-vouchers">0.00 <span>ج</span></div><div class="title">صافي سندات العملاء (تحصيل - صرف)</div></div>
-            <div class="list-card"><div class="amount" id="col-profits">0.00 <span>ج</span></div><div class="title">إجمالي الأرباح</div></div>
+            <div class="list-card owner-only" data-role="owner"><div class="amount" id="col-profits">0.00 <span>ج</span></div><div class="title">إجمالي الأرباح</div></div>
             <div class="list-card"><div class="amount" id="col-expenses" style="color:var(--color-val-red);">0.00 <span>ج</span></div><div class="title">إجمالي المصروفات</div></div>
-            <div class="list-card"><div class="amount" id="col-netprofits" style="color:var(--color-val-green);">0.00 <span>ج</span></div><div class="title">الأرباح بعد المصروفات</div></div>
-            <div class="list-card"><div class="amount" id="col-margin" style="color:var(--warning-color);">0 <span>%</span></div><div class="title">نسبة الأرباح</div></div>
+            <div class="list-card owner-only" data-role="owner"><div class="amount" id="col-netprofits" style="color:var(--color-val-green);">0.00 <span>ج</span></div><div class="title">الأرباح بعد المصروفات</div></div>
+            <div class="list-card owner-only" data-role="owner"><div class="amount" id="col-margin" style="color:var(--warning-color);">0 <span>%</span></div><div class="title">نسبة الأرباح</div></div>
         </div>
 
         <!-- ================= 5.5 المفكره الذكيه الذكية ================= -->
@@ -266,7 +266,7 @@
         </div>
 
         <!-- ================= 2. الأرباح ================= -->
-        <div class="tab-section" id="ov-profits" data-main="overview">
+        <div class="tab-section owner-only" data-role="owner" id="ov-profits" data-main="overview">
             <div class="stat-card-overview"><div class="title">اليوم</div><div class="amount" id="profit-today" style="color:var(--color-val-green);">0.00 <span style="font-size:14px;">ج</span></div></div>
             <div class="stat-card-overview"><div class="title">أمس</div><div class="amount" id="profit-yesterday" style="color:var(--color-val-green);">0.00 <span style="font-size:14px;">ج</span></div></div>
             <div class="stat-card-overview"><div class="title">هذا الشهر</div><div class="amount" id="profit-month" style="color:var(--color-val-green);">0.00 <span style="font-size:14px;">ج</span></div></div>
@@ -368,6 +368,7 @@
     </div>
 
     <script src="db.js"></script>
+    <script src="print_manager.js"></script>
     
     <script>
         window.addEventListener('DOMContentLoaded', () => {
@@ -460,10 +461,11 @@ let savedSection = sessionStorage.getItem('smartAcc_currentSection') || 'col-not
                 let subTabsHtml = '';
 
                 if (mainCat === 'overview') {
+                    let canSeeProfits = !window.SerajAuth || window.SerajAuth.canAccess('profits');
                     subTabsHtml = `
                         <button class="sub-tab-btn ${subCatId === 'ov-suppliers' ? 'tab-active' : ''}" onclick="scrollToSection('ov-suppliers')">الموردين</button>
                         <button class="sub-tab-btn ${subCatId === 'ov-shortages' ? 'tab-active' : ''}" onclick="scrollToSection('ov-shortages')">نواقص المخزن</button>
-                        <button class="sub-tab-btn ${subCatId === 'ov-profits' ? 'tab-active' : ''}" onclick="scrollToSection('ov-profits')">الارباح</button>
+                        ${canSeeProfits ? `<button class="sub-tab-btn ${subCatId === 'ov-profits' ? 'tab-active' : ''}" onclick="scrollToSection('ov-profits')">الارباح</button>` : ''}
                         <button class="sub-tab-btn ${subCatId === 'ov-sales' ? 'tab-active' : ''}" onclick="scrollToSection('ov-sales')">المبيعات</button>
                     `;
                 } else if (mainCat === 'collected') {
@@ -517,6 +519,20 @@ let savedSection = sessionStorage.getItem('smartAcc_currentSection') || 'col-not
                     }
                 });
             }
+            const targetTab = (localStorage.getItem('seraj_active_tab') || '').trim();
+            if (targetTab) {
+                localStorage.removeItem('seraj_active_tab');
+                for (let k = 0; k < acc.length; k++) {
+                    if ((acc[k].textContent || '').trim() === targetTab) {
+                        acc[k].classList.add('tab-active');
+                        let p = acc[k].nextElementSibling;
+                        if (p && p.classList.contains('panel')) {
+                            p.style.maxHeight = p.scrollHeight + 'px';
+                        }
+                        break;
+                    }
+                }
+            }
         }
 
 // دوال مساعدة موحدة للتواريخ والأسماء وتكلفة الصنف بالتوافق التام مع db.js
@@ -547,9 +563,13 @@ function getSafeTimeMs(val) {
             return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
         }
 
-        // حساب صافي الفاتورة مع منع خصم الفاتورة مرتين (Double Discount Protection)
+        // حساب صافي الفاتورة بالتوافق التام مع المحرك المركزي في db.js
         function getInvoiceNetTotal(inv) {
+            if (typeof DB !== 'undefined' && typeof DB._computeInvoiceNetTotal === 'function') {
+                return DB._computeInvoiceNetTotal(inv);
+            }
             let rawTotal = Math.abs(parseFloat(inv.total) || 0);
+            if (inv.isNetTotal === true) return rawTotal;
             let rawDiscount = Math.abs(parseFloat(inv.discount) || 0);
             let checkoutPaid = parseFloat(inv.initialPaid ?? inv.paid) || 0;
             let origRem = parseFloat(inv.initialRemaining ?? inv.remaining) || 0;
@@ -557,90 +577,69 @@ function getSafeTimeMs(val) {
             return isDiscSubtracted ? rawTotal : Math.max(0, rawTotal - rawDiscount);
         }
 
-        // استخراج تكلفة الشراء الدقيقة للصنف (شاملاً الأصناف المؤرشفة والدفعات lots)
-        function getItemUnitCost(item, productsDB) {
-            let pPrice = parseFloat(item.purchasePrice ?? item.buyPrice ?? item.costPrice);
-            if (!isNaN(pPrice) && pPrice > 0) return pPrice;
-
-            let itemNormName = normText(item.name);
-            let p = productsDB.find(x => x && (
-                (item.id !== undefined && item.id !== null && String(x.id) === String(item.id)) ||
-                (itemNormName && normText(x.name) === itemNormName)
-            ));
-
-            if (!p) return 0;
-
-            let surfaceCost = parseFloat(p.purchasePrice ?? p.buyPrice ?? p.costPrice) || 0;
-            if (surfaceCost > 0) return surfaceCost;
-
-            if (Array.isArray(p.lots) && p.lots.length > 0) {
-                let lastLot = p.lots[p.lots.length - 1];
-                return parseFloat(lastLot.purchasePrice || lastLot.buyPrice || lastLot.costPrice) || 0;
+        // استخراج تكلفة السطر الدقيقة (FIFO cogsTotal / weightedUnitCost ثم الأصناف المؤرشفة والدفعات)
+        function getItemLineCostAcc(item, productsDB) {
+            if (!item) return 0;
+            let qty = Math.abs(parseFloat(item.qty ?? item.quantity) || 0);
+            if (item.cogsTotal !== undefined && item.cogsTotal !== null && parseFloat(item.cogsTotal) > 0) {
+                return window.Utils.round2(Math.abs(parseFloat(item.cogsTotal)));
             }
-            return 0;
+            let pPrice = parseFloat(item.weightedUnitCost ?? item.purchasePrice ?? item.buyPrice ?? item.costPrice);
+            if (isNaN(pPrice) || pPrice <= 0) {
+                let itemNormName = normText(item.name);
+                let itemId = item.id ?? item.productId;
+                let p = productsDB.find(x => x && (
+                    (itemId !== undefined && itemId !== null && String(x.id) === String(itemId)) ||
+                    (itemNormName && normText(x.name) === itemNormName)
+                ));
+                if (p) {
+                    pPrice = parseFloat(p.purchasePrice ?? p.buyPrice ?? p.costPrice ?? p._lastValidPurchase) || 0;
+                    if (pPrice <= 0 && Array.isArray(p.lots) && p.lots.length > 0) {
+                        for (let i = p.lots.length - 1; i >= 0; i--) {
+                            let lc = parseFloat(p.lots[i]?.purchasePrice || p.lots[i]?.buyPrice || p.lots[i]?.costPrice) || 0;
+                            if (lc > 0) { pPrice = lc; break; }
+                        }
+                    }
+                }
+            }
+            return window.Utils.round2((pPrice > 0 ? pPrice : 0) * qty);
+        }
+
+        function getItemUnitCost(item, productsDB) {
+            let qty = Math.abs(parseFloat(item?.qty ?? item?.quantity) || 1);
+            return qty > 0 ? window.Utils.round2(getItemLineCostAcc(item, productsDB) / qty) : 0;
         }
 
         function calculateOverviewStats() {
-            if (typeof DB === 'undefined') return;
-            // استدعاء العملاء أولاً لضمان تحديث الفواتير وحساب الأرصدة بدقة
-            if (typeof DB.getCustomers === 'function') DB.getCustomers(false, false);
-            let invoices = (typeof DB.getSalesInvoices === 'function') ? DB.getSalesInvoices(false) : [];
-            let productsDB = (typeof DB.getProducts === 'function') ? DB.getProducts(true) : []; 
-            
-            let today = new Date();
-            let yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-            
-            let sToday = 0, sYesterday = 0, sThisMonth = 0, sLastMonth = 0, sTotal = 0;
-            let pToday = 0, pYesterday = 0, pThisMonth = 0, pLastMonth = 0, pTotal = 0;
+            if (typeof DB === 'undefined' || typeof DB.getFinancialSummary !== 'function') return;
+            const canSeeProfits = !(window.SerajAuth && typeof window.SerajAuth.canAccess === 'function') || window.SerajAuth.canAccess('profits');
+            const now = new Date();
+            const todayIso = window.Utils.getLocalDateString(now);
+            const yestDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+            const yestIso = window.Utils.getLocalDateString(yestDate);
+            const monthStartIso = window.Utils.getLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
+            const lastMonth = window.Utils.getLastMonthRange(now);
 
-            invoices.forEach(inv => {
-                if (!inv || inv.type === 'quotation' || inv.isCanceled || inv.type === 'canceled' || inv.isDeleted || inv.status === 'deleted') return;
-                
-                let invTime = getSafeTimeMs(inv.date || inv.timestamp) || Date.now();
-                let invDate = new Date(invTime); 
-                let isReturn = (inv.type === 'return' || inv.type === 'return_sale' || inv.type === 'sales_return'); 
-                
-                let netTotal = getInvoiceNetTotal(inv);
-                let finalReq = isReturn ? -netTotal : netTotal; 
-                
-                let invCost = 0;
-                if (Array.isArray(inv.items)) {
-                    inv.items.forEach(item => { 
-                        if (!item) return;
-                        let pPrice = getItemUnitCost(item, productsDB);
-                        invCost += pPrice * Math.abs(parseFloat(item.qty) || 0); 
-                    });
-                }
-                
-                if (isReturn) invCost = -invCost; 
-                let invProfit = finalReq - invCost;
-                
-                sTotal += finalReq;
-                pTotal += invProfit;
+            const sumToday = DB.getFinancialSummary(todayIso, todayIso);
+            const sumYest = DB.getFinancialSummary(yestIso, yestIso);
+            const sumMonth = DB.getFinancialSummary(monthStartIso, todayIso);
+            const sumLastMonth = DB.getFinancialSummary(lastMonth.start, lastMonth.end);
+            const sumTotal = DB.getFinancialSummary(null, null);
 
-                if (isSameDay(invDate, today)) { sToday += finalReq; pToday += invProfit; }
-                if (isSameDay(invDate, yesterday)) { sYesterday += finalReq; pYesterday += invProfit; }
-                
-                if (invDate.getFullYear() === today.getFullYear()) {
-                    if (invDate.getMonth() === today.getMonth()) { sThisMonth += finalReq; pThisMonth += invProfit; }
-                    if (invDate.getMonth() === today.getMonth() - 1) { sLastMonth += finalReq; pLastMonth += invProfit; }
-                } else if (today.getMonth() === 0 && invDate.getMonth() === 11 && invDate.getFullYear() === today.getFullYear() - 1) {
-                    sLastMonth += finalReq; pLastMonth += invProfit;
-                }
-            });
+            const fmtVal = (v) => window.Utils.round2(v).toFixed(2) + ' <span style="font-size:14px;">ج</span>';
+            const fmtProfit = (v) => canSeeProfits ? fmtVal(v) : '---';
 
-            document.getElementById('sales-today').innerHTML = sToday.toFixed(2) + ' <span style="font-size:14px;">ج</span>';
-            document.getElementById('sales-yesterday').innerHTML = sYesterday.toFixed(2) + ' <span style="font-size:14px;">ج</span>';
-            document.getElementById('sales-month').innerHTML = sThisMonth.toFixed(2) + ' <span style="font-size:14px;">ج</span>';
-            document.getElementById('sales-lastmonth').innerHTML = sLastMonth.toFixed(2) + ' <span style="font-size:14px;">ج</span>';
-            document.getElementById('sales-total').innerHTML = sTotal.toFixed(2) + ' <span style="font-size:14px;">ج</span>';
+            document.getElementById('sales-today').innerHTML = fmtVal(sumToday.netSales);
+            document.getElementById('sales-yesterday').innerHTML = fmtVal(sumYest.netSales);
+            document.getElementById('sales-month').innerHTML = fmtVal(sumMonth.netSales);
+            document.getElementById('sales-lastmonth').innerHTML = fmtVal(sumLastMonth.netSales);
+            document.getElementById('sales-total').innerHTML = fmtVal(sumTotal.netSales);
 
-            document.getElementById('profit-today').innerHTML = pToday.toFixed(2) + ' <span style="font-size:14px;">ج</span>';
-            document.getElementById('profit-yesterday').innerHTML = pYesterday.toFixed(2) + ' <span style="font-size:14px;">ج</span>';
-            document.getElementById('profit-month').innerHTML = pThisMonth.toFixed(2) + ' <span style="font-size:14px;">ج</span>';
-            document.getElementById('profit-lastmonth').innerHTML = pLastMonth.toFixed(2) + ' <span style="font-size:14px;">ج</span>';
-            document.getElementById('profit-total').innerHTML = pTotal.toFixed(2) + ' <span style="font-size:14px;">ج</span>';
+            document.getElementById('profit-today').innerHTML = fmtProfit(sumToday.grossProfit);
+            document.getElementById('profit-yesterday').innerHTML = fmtProfit(sumYest.grossProfit);
+            document.getElementById('profit-month').innerHTML = fmtProfit(sumMonth.grossProfit);
+            document.getElementById('profit-lastmonth').innerHTML = fmtProfit(sumLastMonth.grossProfit);
+            document.getElementById('profit-total').innerHTML = fmtProfit(sumTotal.grossProfit);
         }
 
         function calculateCollectedData() {
@@ -684,8 +683,7 @@ function getSafeTimeMs(val) {
                 if (Array.isArray(inv.items)) { 
                     inv.items.forEach(item => { 
                         if (!item) return;
-                        let pPrice = getItemUnitCost(item, productsDB);
-                        invCost += pPrice * Math.abs(parseFloat(item.qty) || 0); 
+                        invCost += getItemLineCostAcc(item, productsDB);
                     }); 
                 }
                 if (isReturn) invCost = -invCost;
@@ -738,10 +736,16 @@ function getSafeTimeMs(val) {
             document.getElementById('col-paid').innerHTML = colPaid.toFixed(2) + ' <span>ج</span>';
             document.getElementById('col-deferred').innerHTML = colDeferred.toFixed(2) + ' <span>ج</span>';
             document.getElementById('col-vouchers').innerHTML = colVouchers.toFixed(2) + ' <span>ج</span>';
-            document.getElementById('col-profits').innerHTML = colProfits.toFixed(2) + ' <span>ج</span>';
             document.getElementById('col-expenses').innerHTML = colExpenses.toFixed(2) + ' <span>ج</span>';
-            document.getElementById('col-netprofits').innerHTML = colNetProfits.toFixed(2) + ' <span>ج</span>';
-            document.getElementById('col-margin').innerHTML = colMargin.toFixed(1) + ' <span>%</span>';
+            if (!window.SerajAuth || window.SerajAuth.canAccess('profits')) {
+                document.getElementById('col-profits').innerHTML = colProfits.toFixed(2) + ' <span>ج</span>';
+                document.getElementById('col-netprofits').innerHTML = colNetProfits.toFixed(2) + ' <span>ج</span>';
+                document.getElementById('col-margin').innerHTML = colMargin.toFixed(1) + ' <span>%</span>';
+            } else {
+                document.getElementById('col-profits').innerHTML = '---';
+                document.getElementById('col-netprofits').innerHTML = '---';
+                document.getElementById('col-margin').innerHTML = '---';
+            }
 
             let colPurchasesTotal = 0, colPurchasesPaid = 0, colPurchasesDeferred = 0, colPurchasesVouchers = 0;
             purchaseInvoices.forEach(inv => {
@@ -883,15 +887,22 @@ function getSafeTimeMs(val) {
                 }
             }
             
-            // الفلتر الأساسي (شامل إخفاء الأصناف الفرعية/اللمبات والأصناف المؤرشفة)
+            // الفلتر الأساسي (إخفاء الأصناف الفرعية المربوطة بأب عبر parentProductId أو autoParentId والمؤرشفة)
             let products = allProducts.filter(p => {
                 if (!p || p.isArchived === true || p.isDeleted === true || String(p.isDeleted).toLowerCase() === 'true' ||
                     p.deleted === true || String(p.deleted).toLowerCase() === 'true' ||
                     p.archived === true || String(p.archived).toLowerCase() === 'true' || 
-                    p.autoParentId) {
+                    (p.parentProductId || p.autoParentId)) {
                     return false;
                 }
                 return true;
+            });
+
+            let idByNormName = new Map();
+            allProducts.forEach(p => {
+                if (p && p.name && !p.isArchived && !p.isDeleted) {
+                    idByNormName.set(normText(p.name), String(p.id));
+                }
             });
 
             let salesInvoices = (typeof DB.getSalesInvoices === 'function') ? DB.getSalesInvoices(false) : [];
@@ -912,21 +923,26 @@ function getSafeTimeMs(val) {
                     let multiplier = isReturn ? -1 : 1; 
 
                     inv.items.forEach(item => {
-                        if (!item || item.id === undefined || item.id === null) return;
-                        let idKey = String(item.id);
+                        if (!item) return;
+                        let rawId = item.id ?? item.productId;
+                        let idKey = (rawId !== undefined && rawId !== null && String(rawId) !== '')
+                            ? String(rawId)
+                            : (item.name ? idByNormName.get(normText(item.name)) : null);
+                        if (!idKey) return;
                         if (!periodSales[idKey]) periodSales[idKey] = 0;
-                        periodSales[idKey] += (parseFloat(item.qty) || 0) * multiplier;
+                        periodSales[idKey] += (parseFloat(item.qty ?? item.quantity) || 0) * multiplier;
                     });
                 }
             });
 
             // تحويل مبيعات الأصناف الفرعية (اللمبات/القطع) إلى استهلاك من الصنف الرئيسي (الكرتونة)
             allProducts.forEach(subP => {
-                if (!subP || !subP.autoParentId || subP.isArchived || subP.isDeleted) return;
+                let pParentId = subP ? (subP.parentProductId || subP.autoParentId) : null;
+                if (!subP || !pParentId || subP.isArchived || subP.isDeleted) return;
                 let subSold = periodSales[String(subP.id)] || 0;
-                let rate = parseFloat(subP.autoConversionRate) || 50;
+                let rate = parseFloat(subP.unitsPerPack || subP.autoConversionRate) || 50;
                 if (subSold > 0 && rate > 0) {
-                    let parentIdKey = String(subP.autoParentId);
+                    let parentIdKey = String(pParentId);
                     periodSales[parentIdKey] = (periodSales[parentIdKey] || 0) + (subSold / rate);
                 }
             });
@@ -939,12 +955,16 @@ function getSafeTimeMs(val) {
                 let hasShortages = false;
                 
                 products.forEach(p => {
-                    let soldInPeriod = periodSales[String(p.id)] || 0;
-                    let currentStock = (Array.isArray(p.lots) && p.lots.length > 0) ? p.lots.reduce((sum, l) => sum + (parseFloat(l.stock) || 0), 0) : (parseFloat(p.stock) || parseFloat(p.qty) || 0);
+                    let soldInPeriod = Math.max(0, window.Utils.round4(periodSales[String(p.id)] || 0));
+                    let currentStock = (Array.isArray(p.lots) && p.lots.length > 0)
+                        ? window.Utils.round4(p.lots.reduce((sum, l) => sum + (parseFloat(l.stock) || 0), 0))
+                        : window.Utils.round4(p.stock ?? p.qty ?? 0);
                     
-                    if (soldInPeriod > 0 && currentStock < soldInPeriod) {
+                    if (currentStock < -0.0001 || (soldInPeriod > 0 && currentStock < soldInPeriod)) {
                         hasShortages = true;
-                        let statusText = currentStock <= 0 ? '<div style="color:#ff1a40; font-size:12px; margin-top:3px;">(نفد تماماً)</div>' : '';
+                        let statusText = currentStock < -0.0001
+                            ? '<div style="color:#ff1a40; font-size:12px; margin-top:3px;">(عجز بالسالب)</div>'
+                            : (currentStock <= 0 ? '<div style="color:#ff1a40; font-size:12px; margin-top:3px;">(نفد تماماً)</div>' : '');
                         
                         shBody.insertAdjacentHTML('beforeend', `
                         <tr style="border-bottom: 1px solid rgba(168, 85, 247, 0.2);">
@@ -976,45 +996,69 @@ function getSafeTimeMs(val) {
                     }
                 });
 
+                const ghostSupNorms = new Set(['', 'بدون مورد', 'نقدي', 'مورد نقدي', 'مورد عام', 'عام', 'رصيد افتتاحي', 'تسويه جرديه', 'تسويه جرديه (مباشره)', 'استيراد اكسيل', 'سحب بالسالب (عجز)', 'رصيد سابق بالمخزن']);
+                const extractCleanSupplier = (rawSup) => {
+                    if (!rawSup) return '';
+                    let s = String(rawSup).trim();
+                    let m = s.match(/المورد\s*:\s*(.+)$/);
+                    let cleaned = (m && m[1]) ? m[1].trim() : s;
+                    let n = normText(cleaned);
+                    if (!n || ghostSupNorms.has(n) || n.includes('سحب بالسالب') || n.includes('سحب تلقائي')) return '';
+                    return cleaned;
+                };
+
+                let lastRealSupByProd = new Map();
+                let allPurchInvs = (typeof DB.getPurchaseInvoices === 'function')
+                    ? DB.getPurchaseInvoices(false).slice().sort((a, b) => getSafeTimeMs(b.date || b.timestamp) - getSafeTimeMs(a.date || a.timestamp))
+                    : [];
+                allPurchInvs.forEach(inv => {
+                    if (!inv || inv.isCanceled || inv.isDeleted) return;
+                    let supClean = extractCleanSupplier(inv.supplier || inv.supplierName);
+                    if (!supClean || !Array.isArray(inv.items)) return;
+                    inv.items.forEach(it => {
+                        if (!it) return;
+                        let key = (it.id !== undefined && it.id !== null) ? String(it.id) : (it.name ? idByNormName.get(normText(it.name)) : null);
+                        if (key && !lastRealSupByProd.has(key)) lastRealSupByProd.set(key, supClean);
+                    });
+                });
+
                 products.forEach(p => {
-                    let soldInPeriod = periodSales[String(p.id)] || 0;
-                    let currentStock = (Array.isArray(p.lots) && p.lots.length > 0) ? p.lots.reduce((sum, l) => sum + (parseFloat(l.stock) || 0), 0) : (parseFloat(p.stock) || parseFloat(p.qty) || 0);
-                    
-                    const extractCleanSupplier = (rawSup) => {
-                        if (!rawSup) return 'بدون مورد';
-                        let s = String(rawSup).trim();
-                        let m = s.match(/المورد\s*:\s*(.+)$/);
-                        return (m && m[1]) ? m[1].trim() : s;
-                    };
+                    let soldInPeriod = Math.max(0, window.Utils.round4(periodSales[String(p.id)] || 0));
+                    let currentStock = (Array.isArray(p.lots) && p.lots.length > 0)
+                        ? window.Utils.round4(p.lots.reduce((sum, l) => sum + (parseFloat(l.stock) || 0), 0))
+                        : window.Utils.round4(p.stock ?? p.qty ?? 0);
 
-                    let rawLastSup = (Array.isArray(p.lots) && p.lots.length > 0 && p.lots[p.lots.length - 1].supplier)
-                        ? p.lots[p.lots.length - 1].supplier
-                        : (p.supplier || 'بدون مورد');
-                    let pSupplier = extractCleanSupplier(rawLastSup);
+                    let pSupplier = lastRealSupByProd.get(String(p.id)) || '';
+                    if (!pSupplier && Array.isArray(p.lots)) {
+                        for (let li = p.lots.length - 1; li >= 0; li--) {
+                            let cand = extractCleanSupplier(p.lots[li]?.supplier);
+                            if (cand) { pSupplier = cand; break; }
+                        }
+                    }
+                    if (!pSupplier) pSupplier = extractCleanSupplier(p.supplier) || 'بدون مورد';
+
                     let belongsToSupplier = false;
-
                     if (activeSupplierName === 'all') {
                         belongsToSupplier = true;
                     } else if (normActiveSup) {
+                        let matchDetected = normText(pSupplier) === normActiveSup || normText(pSupplier).includes(normActiveSup);
                         let matchSurface = normText(extractCleanSupplier(p.supplier)).includes(normActiveSup);
                         let matchLots = Array.isArray(p.lots) && p.lots.some(l => {
-                            if (!l || !l.supplier) return false;
-                            let cleanLotSup = normText(extractCleanSupplier(l.supplier));
-                            let fullLotSup = normText(l.supplier);
-                            return cleanLotSup === normActiveSup || cleanLotSup.includes(normActiveSup) || fullLotSup.includes(normActiveSup);
+                            let cleanLotSup = normText(extractCleanSupplier(l?.supplier));
+                            return cleanLotSup && (cleanLotSup === normActiveSup || cleanLotSup.includes(normActiveSup));
                         });
-                        if (matchSurface || matchLots) {
+                        if (matchDetected || matchSurface || matchLots) {
                             belongsToSupplier = true;
                             pSupplier = activeSupplierName;
                         }
                     }
 
-                    if (belongsToSupplier && (soldInPeriod > 0 && currentStock < soldInPeriod)) {
+                    if (belongsToSupplier && (currentStock < -0.0001 || (soldInPeriod > 0 && currentStock < soldInPeriod))) {
                         hasOrders = true;
                         let actualSupplier = activeSupplierName === 'all' ? pSupplier : activeSupplierName;
                         
-                        let requiredQty = soldInPeriod - (currentStock > 0 ? currentStock : 0);
-                        let recommendedQty = getLastPurchasedQty(p.name, actualSupplier, p.id) || requiredQty;
+                        let requiredQty = Math.ceil(Math.max(soldInPeriod, 0) - currentStock);
+                        let recommendedQty = Math.max(requiredQty, getLastPurchasedQty(p.name, actualSupplier, p.id) || 0);
                         let waPhone = supplierPhoneMap.get(normText(actualSupplier)) || '';
                         let waUrl = `https://wa.me/${waPhone}?text=${encodeURIComponent(`مطلوب طلبية من: ${p.name} (الكمية: ${Number(recommendedQty).toFixed(2).replace(/\.00$/, '')})`)}`;
                         
@@ -1122,6 +1166,15 @@ function getSafeTimeMs(val) {
             if (window.SerajMegaDB && window.SerajMegaDB.ready) {
                 await window.SerajMegaDB.ready;
             }
+            if (window.SerajAuth && typeof window.SerajAuth.applyRoleGuards === 'function') {
+                window.SerajAuth.applyRoleGuards();
+            }
+            if (window.SerajAuth && !window.SerajAuth.canAccess('profits')) {
+                let ovProfEl = document.getElementById('ov-profits');
+                if (ovProfEl && ovProfEl.parentNode) ovProfEl.parentNode.removeChild(ovProfEl);
+                _lastActiveSubCatId = null;
+                handleScroll();
+            }
             populateSuppliers();
             calculateOverviewStats();
             calculateCollectedData();
@@ -1161,10 +1214,11 @@ function getSafeTimeMs(val) {
         function openNoteModal(noteId) {
             let modal = document.getElementById('note-modal');
             if (!modal) return;
-            if (!(history.state && history.state.noteModalOpen)) {
-                history.pushState({ noteModalOpen: true }, '');
+            if (window.SerajUI && typeof window.SerajUI.openModal === 'function') {
+                window.SerajUI.openModal(modal, { display: 'flex' });
+            } else {
+                modal.style.display = 'flex';
             }
-            modal.style.display = 'flex';
             let delWholeBtn = document.getElementById('btn-delete-whole-note');
             if (delWholeBtn) delWholeBtn.style.display = noteId ? 'inline-block' : 'none';
             
@@ -1208,7 +1262,12 @@ function getSafeTimeMs(val) {
 
         function closeNoteModal() {
             let modal = document.getElementById('note-modal');
-            if (modal) modal.style.display = 'none';
+            if (!modal) return;
+            if (window.SerajUI && typeof window.SerajUI.closeModal === 'function') {
+                window.SerajUI.closeModal(modal);
+            } else {
+                modal.style.display = 'none';
+            }
         }
 
         let searchTimer;
@@ -1525,10 +1584,13 @@ function getSafeTimeMs(val) {
             if (!rowsHtml) rowsHtml = `<tr><td colspan="5" style="border:1px solid #333; padding:12px; text-align:center; color:#000;">لا توجد أصناف مسجلة</td></tr>`;
 
             let todayStr = (window.Utils && window.Utils.getLocalDateString) ? window.Utils.getLocalDateString() : new Date().toISOString().slice(0, 10);
+            const _shopNameNote = (window.PrintManager && typeof window.PrintManager.getShopBranding === 'function')
+                ? window.PrintManager.getShopBranding().shopName
+                : ((typeof DB !== 'undefined' && typeof DB.getStoreSettings === 'function') ? DB.getStoreSettings().shopName : (window.APP_BRAND_CONFIG?.appName || 'نظام الكاشير الذكي'));
             let a4Html = `
                 <div dir="rtl" style="background:#ffffff; color:#000000; padding:12px; font-family:'Cairo', Tahoma, Arial, sans-serif;">
                     <div style="text-align:center; border-bottom:3px solid #000; padding-bottom:10px; margin-bottom:15px;">
-                        <h1 style="margin:0; font-size:24px; color:#000;">محلات سراج LED - ${safeHtmlAcc(title)}</h1>
+                        <h1 style="margin:0; font-size:24px; color:#000;">${safeHtmlAcc(_shopNameNote)} - ${safeHtmlAcc(title)}</h1>
                         ${comment ? `<div style="font-size:14px; color:#333; margin-top:4px;">${safeHtmlAcc(comment)}</div>` : ''}
                         <div style="font-size:13px; font-weight:bold; color:#555; margin-top:4px;">التاريخ: ${todayStr}</div>
                     </div>
@@ -1553,8 +1615,15 @@ function getSafeTimeMs(val) {
 
         function exportCurrentSectionPDF() {
             let activeId = _lastActiveSubCatId || sessionStorage.getItem('smartAcc_currentSection') || 'ov-sales';
+            if (activeId === 'ov-profits' && window.SerajAuth && !window.SerajAuth.canAccess('profits')) {
+                return;
+            }
             let secEl = document.getElementById(activeId);
             if (!secEl) return;
+
+            let shopBrandName = (typeof DB !== 'undefined' && typeof DB.getStoreSettings === 'function')
+                ? (DB.getStoreSettings().shopName || (window.APP_BRAND_CONFIG ? window.APP_BRAND_CONFIG.appName : 'نظام الكاشير الذكي'))
+                : 'نظام الكاشير الذكي';
 
             let titles = {
                 'ov-sales': 'نظرة عامة - المبيعات',
@@ -1580,17 +1649,19 @@ function getSafeTimeMs(val) {
                 let rows = (smartNotesDB || []).map((n, i) => `
                     <tr>
                         <td style="border:1px solid #333; padding:6px; text-align:center;">${i + 1}</td>
-                        <td style="border:1px solid #333; padding:6px 8px; text-align:right; font-weight:bold;">${n.title || 'بدون اسم'}</td>
-                        <td style="border:1px solid #333; padding:6px; text-align:right;">${n.comment || '---'}</td>
+                        <td style="border:1px solid #333; padding:6px 8px; text-align:right; font-weight:bold;">${safeHtmlAcc(n.title || 'بدون اسم')}</td>
+                        <td style="border:1px solid #333; padding:6px; text-align:right;">${safeHtmlAcc(n.comment || '---')}</td>
                         <td style="border:1px solid #333; padding:6px; text-align:center;">${(n.items || []).length}</td>
                     </tr>`).join('');
                 bodyHtml = `<table><thead><tr><th>م</th><th>العنوان</th><th>ملاحظة</th><th>عدد الأصناف</th></tr></thead><tbody>${rows || '<tr><td colspan="4">لا توجد ملاحظات</td></tr>'}</tbody></table>`;
             } else {
-                let cards = Array.from(secEl.querySelectorAll('.stat-card-overview, .list-card'));
+                let canSeeProfits = !window.SerajAuth || window.SerajAuth.canAccess('profits');
+                let cards = Array.from(secEl.querySelectorAll('.stat-card-overview, .list-card'))
+                    .filter(c => canSeeProfits || !c.classList.contains('owner-only'));
                 let rows = cards.map(c => {
                     let t = c.querySelector('.title')?.innerText || '';
                     let a = c.querySelector('.amount')?.innerText || '';
-                    return `<tr><td style="border:1px solid #333; padding:8px; text-align:right; font-weight:bold;">${t}</td><td style="border:1px solid #333; padding:8px; text-align:center; font-weight:bold;">${a}</td></tr>`;
+                    return `<tr><td style="border:1px solid #333; padding:8px; text-align:right; font-weight:bold;">${safeHtmlAcc(t)}</td><td style="border:1px solid #333; padding:8px; text-align:center; font-weight:bold;">${safeHtmlAcc(a)}</td></tr>`;
                 }).join('');
                 bodyHtml = `<table><thead><tr><th style="text-align:right;">البند</th><th>القيمة</th></tr></thead><tbody>${rows}</tbody></table>`;
             }
@@ -1598,8 +1669,8 @@ function getSafeTimeMs(val) {
             let a4Html = `
                 <div dir="rtl" style="background:#ffffff; color:#000000; padding:12px; font-family:'Cairo', Tahoma, Arial, sans-serif;">
                     <div style="text-align:center; border-bottom:3px solid #000; padding-bottom:10px; margin-bottom:15px;">
-                        <h1 style="margin:0; font-size:22px; color:#000;">محلات سراج LED - ${reportTitle}</h1>
-                        <div style="font-size:13px; font-weight:bold; color:#444; margin-top:4px;">التاريخ: ${todayStr}</div>
+                        <h1 style="margin:0; font-size:22px; color:#000;">${safeHtmlAcc(shopBrandName)} - ${safeHtmlAcc(reportTitle)}</h1>
+                        <div style="font-size:13px; font-weight:bold; color:#444; margin-top:4px;">التاريخ: ${safeHtmlAcc(todayStr)}</div>
                     </div>
                     ${bodyHtml}
                 </div>`;

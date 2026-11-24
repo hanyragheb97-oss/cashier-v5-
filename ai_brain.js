@@ -1,13 +1,18 @@
+// [AI_BRAIN_V5_IIFE]
+(function () {
+'use strict';
+let isManagerMode = false;
+let recognition = null;
+let currentImageData = null;
+let isRecording = false;
+let isAudioEnabled = true;
+let manualMicStop = false;
+
 // ==========================================
 // المحاسب الذكي - النسخة العملية للكاشير (وعي بالسياق)
 // ==========================================
 
-if (typeof isManagerMode === 'undefined') window.isManagerMode = false;
-if (typeof recognition === 'undefined') window.recognition = null;
-if (typeof currentImageData === 'undefined') window.currentImageData = null; 
-if (typeof isRecording === 'undefined') window.isRecording = false; 
-if (typeof isAudioEnabled === 'undefined') window.isAudioEnabled = true; 
-if (typeof manualMicStop === 'undefined') window.manualMicStop = false; 
+// المتغيرات معزولة داخل النطاق الخاص للوحدة
 
 function unlockAudio() {
     if(isAudioEnabled && 'speechSynthesis' in window) {
@@ -117,8 +122,11 @@ function buildAIBrainUI() {
         else unlockAudio();
     });
 
-    document.getElementById('ai-clear-btn').addEventListener('click', () => {
-        if(confirm("هل تريد مسح سجل المحادثة؟")) {
+    document.getElementById('ai-clear-btn').addEventListener('click', async () => {
+        const confirmed = (typeof window.SerajConfirm === 'function')
+            ? await window.SerajConfirm('هل تريد مسح سجل المحادثة؟')
+            : confirm('هل تريد مسح سجل المحادثة؟');
+        if (confirmed) {
             localStorage.removeItem('seraj_ai_chat_history');
             document.getElementById('ai-messages').innerHTML = '';
             addMessage('bot', 'مرحباً! كيف يمكنني مساعدتك اليوم؟', null, false);
@@ -159,37 +167,49 @@ function loadSavedHistory() {
     if (saved) {
         try {
             let history = JSON.parse(saved);
-            history.forEach(m => addMessage(m.sender, m.text, m.imgSrc, false));
-        } catch(e) {
-            addMessage('bot', 'مرحباً! أنا المساعد الذكي لسراج.', null, false);
-        }
-    } else {
-        addMessage('bot', 'مرحباً! أنا المساعد الذكي لسراج.', null, false);
+            if (Array.isArray(history) && history.length > 0) {
+                history.forEach(m => addMessage(m.sender, m.text, null, false));
+                return;
+            }
+        } catch (e) {}
     }
+    addMessage('bot', 'مرحباً! أنا المساعد الذكي، كيف أساعدك اليوم؟', null, false);
 }
 
 function saveHistory(sender, text, imgSrc) {
-    let saved = localStorage.getItem('seraj_ai_chat_history');
-    let history = saved ? JSON.parse(saved) : [];
-    history.push({ sender, text, imgSrc });
-    if(history.length > 50) history.shift(); 
-    localStorage.setItem('seraj_ai_chat_history', JSON.stringify(history));
+    try {
+        let saved = localStorage.getItem('seraj_ai_chat_history');
+        let history = saved ? JSON.parse(saved) : [];
+        if (!Array.isArray(history)) history = [];
+        history.push({ sender, text: String(text || '').slice(0, 2000), imgSrc: null // لا تُحفظ صور base64 في التخزين الخفيف
+        });
+        if (history.length > 40) history = history.slice(-40);
+        localStorage.setItem('seraj_ai_chat_history', JSON.stringify(history));
+    } catch (e) {}
+}
+
+function _sanitizeAiBrainText(val) {
+    if (window.Utils && typeof window.Utils.sanitizeHTML === 'function') {
+        return window.Utils.sanitizeHTML(String(val ?? ''));
+    }
+    return String(val ?? '').replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag]));
 }
 
 function addMessage(sender, text, imgSrc = null, shouldSave = true) {
     const msgDiv = document.createElement('div');
     msgDiv.className = 'ai-msg ' + sender;
     let content = '';
-    if(imgSrc) content += `<img src="${imgSrc}"><br>`;
-    let rawText = String(text ?? '');
-    if (sender === 'user' && window.Utils && typeof window.Utils.sanitizeHTML === 'function') {
-        rawText = window.Utils.sanitizeHTML(rawText);
+    if (imgSrc && typeof imgSrc === 'string' && imgSrc.startsWith('data:image/')) {
+        content += `<img src="${_sanitizeAiBrainText(imgSrc)}"><br>`;
     }
-    content += rawText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+    let rawText = String(text ?? '');
+    let isLoader = (!shouldSave && sender === 'bot' && /^<span id="loader-[0-9]+">[^<]*<\/span>$/.test(rawText));
+    let safeText = isLoader ? rawText : _sanitizeAiBrainText(rawText);
+    content += safeText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
     msgDiv.innerHTML = content;
     document.getElementById('ai-messages').appendChild(msgDiv);
     document.getElementById('ai-messages').scrollTop = document.getElementById('ai-messages').scrollHeight;
-    if(shouldSave) saveHistory(sender, text, imgSrc);
+    if (shouldSave) saveHistory(sender, text, imgSrc);
 }
 
 function handleImageUpload(event) {
@@ -266,6 +286,18 @@ function setupMic() {
 
     recognition.onerror = (e) => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { manualMicStop = true; } };
     
+    if (window.SerajUI && typeof window.SerajUI.registerMediaStopper === 'function') {
+        window.SerajUI.registerMediaStopper('ai_brain_mic', () => {
+            manualMicStop = true;
+            if (isRecording && recognition) {
+                try { recognition.stop(); } catch (e) {}
+            }
+            if ('speechSynthesis' in window) {
+                try { window.speechSynthesis.cancel(); } catch (e) {}
+            }
+        });
+    }
+
     document.getElementById('ai-mic-btn').addEventListener('click', () => {
         if (isRecording) { manualMicStop = true; recognition.stop(); } 
         else { manualMicStop = false; unlockAudio(); try { recognition.start(); } catch(e) {} }
@@ -299,23 +331,38 @@ function getContextAwareData() {
         لا تضف أي نص آخر مع الـ JSON.`;
 
     } else {
-        let allCustomers = (typeof DB !== 'undefined' && typeof DB.getCustomers === 'function') ? DB.getCustomers(false, false) : [];
-        let debtors = allCustomers
-            .filter(c => c && (parseFloat(c.balance) || 0) < -0.01)
-            .map(c => ({ name: c.name, debt: Math.abs(parseFloat(c.balance) || 0) }))
-            .sort((a, b) => b.debt - a.debt);
-        let lowStockCount = originalProducts.filter(p => p && (parseFloat(p.stock) || 0) <= 0).length;
+        let shopBrand = (typeof DB !== 'undefined' && typeof DB.getStoreSettings === 'function')
+            ? (DB.getStoreSettings().shopName || 'المتجر')
+            : 'المتجر';
+        let canFinancial = (typeof window.SerajAuth !== 'undefined' && typeof window.SerajAuth.canAccess === 'function')
+            ? window.SerajAuth.canAccess('ai_financial_queries')
+            : false;
 
-        safeData = {
-            productsCount: originalProducts.length,
-            lowStockCount: lowStockCount,
-            totalCustomerDebt: Number(debtors.reduce((s, d) => s + d.debt, 0).toFixed(2)),
-            topDebtors: debtors.slice(0, 15),
-            vaults: (typeof DB !== 'undefined' && typeof DB.getVaults === 'function') ? DB.getVaults() : {}
-        };
-        systemInstruction = `أنت المدير المالي والمحاسب الذكي لمتجر سراج ليد للكهرباء.
-        بناءً على الملخص المالي المرفق، أجب بدقة واحترافية. 
-        حلل الأرصدة والمديونيات بذكاء. تحدث بلهجة مصرية عملية ومحترمة.`;
+        if (!canFinancial) {
+            safeData = {
+                productsCount: originalProducts.length,
+                availableProducts: originalProducts.slice(0, 120).map(p => ({ name: p.name, price: p.price || p.sellPrice || 0, stock: p.stock || 0 }))
+            };
+            systemInstruction = `أنت مساعد مبيعات في متجر ${shopBrand}. أجب عن استفسارات الأصناف وأسعار البيع المتاحة فقط، ولا تفصح عن أي أرباح أو أسعار شراء أو أرصدة خزائن.`;
+        } else {
+            let allCustomers = (typeof DB !== 'undefined' && typeof DB.getCustomers === 'function') ? DB.getCustomers(false, false) : [];
+            let debtors = allCustomers
+                .filter(c => c && (parseFloat(c.balance) || 0) < -0.01)
+                .map(c => ({ name: c.name, debt: Math.abs(parseFloat(c.balance) || 0) }))
+                .sort((a, b) => b.debt - a.debt);
+            let lowStockCount = originalProducts.filter(p => p && (parseFloat(p.stock) || 0) <= 0).length;
+
+            safeData = {
+                productsCount: originalProducts.length,
+                lowStockCount: lowStockCount,
+                totalCustomerDebt: Number(debtors.reduce((s, d) => s + d.debt, 0).toFixed(2)),
+                topDebtors: debtors.slice(0, 15),
+                vaults: (typeof DB !== 'undefined' && typeof DB.getVaults === 'function') ? DB.getVaults() : {}
+            };
+            systemInstruction = `أنت المدير المالي والمحاسب الذكي لمتجر ${shopBrand}.
+            بناءً على الملخص المالي المرفق، أجب بدقة واحترافية. 
+            حلل الأرصدة والمديونيات بذكاء. تحدث بلهجة مصرية عملية ومحترمة.`;
+        }
     }
 
     return { shopData: safeData, instruction: systemInstruction };
@@ -360,19 +407,30 @@ async function sendMessage() {
             return;
         }
 
+        if (!navigator.onLine) {
+            let offlineMsg = "📴 الجهاز غير متصل بالإنترنت حالياً، خدمة Gemini تحتاج لاتصال إنترنت.";
+            let loader = document.getElementById(loaderId);
+            if (loader && loader.parentElement) loader.parentElement.textContent = offlineMsg;
+            saveHistory('bot', offlineMsg, null);
+            return;
+        }
+
         const cleanKey = savedKey.replace(/[^a-zA-Z0-9_.\-]/g, ''); 
-        const finalUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + cleanKey;
+        const finalUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
         const response = await fetch(finalUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': cleanKey
+            },
             body: JSON.stringify({ contents: [{ role: "user", parts: requestContents }] })
         });
 
         const data = await response.json();
 
         if (!response.ok) {
-            let googleReason = data.error ? data.error.message : "سبب غير معروف";
+            let googleReason = _sanitizeAiBrainText(data.error ? data.error.message : "سبب غير معروف");
             let errorMsg = "❌ جوجل رفضت الطلب والسبب: <br><span style='color:red; font-size:12px;'>" + googleReason + "</span>";
             let loader = document.getElementById(loaderId);
             if (loader && loader.parentElement) loader.parentElement.innerHTML = errorMsg;
@@ -380,7 +438,9 @@ async function sendMessage() {
             return;
         }
         
-        const reply = data.candidates[0].content.parts[0].text;
+        const reply = (data && Array.isArray(data.candidates) && data.candidates[0] && data.candidates[0].content && Array.isArray(data.candidates[0].content.parts) && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text)
+            ? data.candidates[0].content.parts[0].text
+            : "لم يصل رد نصي من الخادم.";
         
         // جلب مساحة الرسالة بشكل آمن لتجنب الـ null
         let loaderElement = document.getElementById(loaderId);
@@ -396,6 +456,12 @@ async function sendMessage() {
                 if (typeof invoice !== 'undefined' && typeof saveDraft === 'function' && typeof renderTable === 'function') {
                     let successCount = 0;
                     let isPurchaseMode = window.location.pathname.toLowerCase().includes('purchase');
+                    if (isPurchaseMode && window.SerajAuth && !window.SerajAuth.canAccess('create_purchase')) {
+                        let denyMsg = "⛔ تسجيل فواتير المشتريات مخصص لصاحب المحل (المالك) فقط.";
+                        if (messageBox) messageBox.innerHTML = denyMsg;
+                        saveHistory('bot', denyMsg, null);
+                        return;
+                    }
                     let localDB = (typeof DB !== 'undefined' && typeof DB.getProducts === 'function') ? (DB.getProducts(false) || []) : []; 
                     const cleanText = (txt) => String(txt || '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/[ىي]/g, 'ي').trim().toLowerCase();
 
@@ -460,7 +526,7 @@ async function sendMessage() {
 
         // عرض الرد النصي العادي
         if (messageBox) {
-            messageBox.innerHTML = reply.replace(/\*(.*?)\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+            messageBox.innerHTML = _sanitizeAiBrainText(reply).replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\*(.*?)\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
         }
         saveHistory('bot', reply, null);
         speakArabic(reply); 
@@ -488,7 +554,11 @@ if (document.readyState === 'loading') {
 // ==========================================
 // تحديث 3: التفريغ الآمن لـ SessionStorage بناءً على نجاح العملية
 // ==========================================
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
+    if (window.SerajMegaDB && window.SerajMegaDB.ready) {
+        await window.SerajMegaDB.ready;
+    }
+    await new Promise(r => setTimeout(r, 150));
     let pSales = sessionStorage.getItem('pendingAICart');
     let pPurchases = sessionStorage.getItem('pendingAICart_purchase');
     let currentPath = window.location.pathname.toLowerCase();
@@ -565,3 +635,5 @@ window.addEventListener('load', () => {
         }
     }
 });
+
+})();
