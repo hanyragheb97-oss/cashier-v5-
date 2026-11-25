@@ -1885,8 +1885,19 @@ table tr:active, .seraj-table tr:active {
     padding: 0;
     margin-bottom: 14px;
     width: 100%;
-    position: static;
+    position: relative;
+    z-index: 60;
     border-bottom: none;
+}
+
+.main-container .filter-section.search-container .filter-select-box.capsule-btn {
+    position: relative;
+    z-index: 61;
+    overflow: visible;
+}
+
+.main-container .filter-section.search-container .filter-select-box.capsule-btn:active {
+    transform: none !important;
 }
 
 .inline-action-dropdown {
@@ -2271,6 +2282,116 @@ select option,
         font-size: 13px !important;
         border-radius: 10px !important;
     }
+}
+
+/* ========================================================================== */
+/* 11.5 تحسينات تجربة الموبايل (مودال السند، تثبيت البيع والشراء، السحب للحذف) */
+/* ========================================================================== */
+
+/* (7) إنزال نافذة إضافة سند عميل/مورد وزيادة شفافية الخلفية العلوية لإظهار ملخص الحساب */
+#addTransactionModal.modal-overlay {
+    align-items: flex-end !important;
+    padding: 0 8px max(10px, env(safe-area-inset-bottom)) 8px !important;
+    background: linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.06) 0%,
+        rgba(0, 0, 0, 0.12) 28%,
+        rgba(0, 0, 0, 0.48) 54%,
+        rgba(0, 0, 0, 0.72) 100%
+    ) !important;
+}
+
+#addTransactionModal .compact-modal {
+    width: 96%;
+    max-width: 460px;
+    max-height: calc(100dvh - 195px) !important;
+    padding: 14px 16px;
+    border-radius: 20px 20px 14px 14px;
+    margin-bottom: 4px;
+}
+
+#addTransactionModal .compact-header {
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+}
+
+#addTransactionModal .compact-row {
+    margin-bottom: 8px !important;
+}
+
+#addTransactionModal .compact-btns {
+    margin-top: 10px;
+    padding-top: 10px;
+}
+
+/* (8) تثبيت شاشة البيع والشراء وحصر التمرير العمودي داخل جدول الأصناف فقط */
+@media screen {
+    body.page-sales,
+    body.page-purchases {
+        height: 100vh;
+        height: 100dvh;
+        max-height: 100dvh;
+        overflow: hidden !important;
+        overscroll-behavior: none;
+        display: flex;
+        flex-direction: column;
+    }
+
+    body.page-sales .header,
+    body.page-purchases .header {
+        flex-shrink: 0;
+        position: relative;
+        top: auto;
+    }
+
+    body.page-sales .sales-container.main-container,
+    body.page-purchases .purchases-container.main-container {
+        flex: 1 1 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: visible;
+        padding-top: 10px !important;
+        padding-bottom: 76px !important;
+        box-sizing: border-box;
+    }
+
+    body.page-sales .sales-container > .search-container,
+    body.page-purchases .purchases-container > .search-container,
+    body.page-sales #queueContainer,
+    body.page-purchases #queueContainer {
+        flex-shrink: 0;
+    }
+
+    body.page-sales .sales-container > .table-wrapper,
+    body.page-purchases .purchases-container > .table-wrapper {
+        flex: 1 1 0;
+        min-height: 0;
+        max-height: none;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-y: contain;
+        touch-action: pan-y;
+        margin-bottom: 0;
+    }
+}
+
+/* (9) تحسين استجابة السحب السريع للحذف (Swipe-to-Delete) دون التأثير على التمرير العمودي */
+.swipe-row,
+.swipe-row td,
+.seraj-swipe-row,
+.seraj-swipe-row td {
+    touch-action: pan-y !important;
+}
+
+.swipe-row.swiping-active {
+    will-change: transform, opacity;
+}
+
+.swipe-row.swipe-delete-ready,
+.swipe-row.swipe-delete-ready td {
+    background-color: rgba(255, 26, 64, 0.22) !important;
 }
 
 /* ========================================================================== */

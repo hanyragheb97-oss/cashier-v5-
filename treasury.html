@@ -217,7 +217,7 @@
                 <div class="treasury-filter-box" onclick="toggleMovementFilterMenu(event)">
                     <span id="currentMovementFilterLabel">جميع الحركات</span>
                     <span style="color: var(--neon-border); font-size: 12px;">▼</span>
-                    <div class="filter-down-menu" id="movementFilterDropdown">
+                    <div class="filter-down-menu" id="movementFilterDropdown" onclick="event.stopPropagation()">
                         <div class="dropdown-menu-item" onclick="setMovementFilter('all')">جميع الحركات</div>
                         <div class="dropdown-menu-item" onclick="setMovementFilter('sales')">فواتير البيع</div>
                         <div class="dropdown-menu-item" onclick="setMovementFilter('return_sale')">مرتجعات البيع</div>
@@ -233,7 +233,7 @@
                 <div class="treasury-filter-box" onclick="toggleVaultFilterMenu(event)">
                     <span id="currentVaultFilterLabel">كل الخزائن</span>
                     <span style="color: var(--neon-border); font-size: 12px;">▼</span>
-                    <div class="filter-down-menu" id="vaultFilterDropdown">
+                    <div class="filter-down-menu" id="vaultFilterDropdown" onclick="event.stopPropagation()">
                         <div class="dropdown-menu-item" onclick="setVaultFilter('all')">كل الخزائن</div>
                         <div class="dropdown-menu-item" onclick="setVaultFilter('main')">الرئيسية (كاش)</div>
                         <div class="dropdown-menu-item" onclick="setVaultFilter('insta')">إنستا (InstaPay)</div>
@@ -365,7 +365,7 @@
         <div class="bottom-capsules owner-only" data-role="owner">
             <div class="capsule" onclick="toggleDurationMenu(event)">
                 📅 <span id="currentDurationLabel">مدى العمل</span>
-                <div class="dropdown-menu" id="durationDropdown">
+                <div class="dropdown-menu" id="durationDropdown" onclick="event.stopPropagation()">
                     <div class="dropdown-menu-item" onclick="setDurationFilter('today')">اليوم</div>
                     <div class="dropdown-menu-item" onclick="setDurationFilter('yesterday')">أمس</div>
                     <div class="dropdown-menu-item" onclick="setDurationFilter('7days')">آخر 7 أيام</div>
@@ -379,7 +379,7 @@
 
             <div class="capsule print-btn" onclick="togglePrintMenu(event)">
                 🖨️ طباعة
-                <div class="dropdown-menu" id="printMenuDropdown">
+                <div class="dropdown-menu" id="printMenuDropdown" onclick="event.stopPropagation()">
                     <div class="dropdown-menu-item" onclick="printThermalStatement()">🧾 طباعة حرارية (80mm)</div>
                     <div class="dropdown-menu-item" onclick="printTreasuryA4()">🖨️ طباعة ورقة (A4)</div>
                     <div class="dropdown-menu-item" onclick="exportTreasuryPDF()">📄 مشاركة / تصدير PDF</div>
@@ -523,7 +523,10 @@
         }
 
         function toggleMovementFilterMenu(e) {
-            if (e) e.stopPropagation();
+            if (e) {
+                if (e.target && e.target.closest('#movementFilterDropdown')) return;
+                e.stopPropagation();
+            }
             const m = document.getElementById('movementFilterDropdown');
             const isOpen = m && m.style.display === 'block';
             closeAllMenus();
@@ -531,7 +534,10 @@
         }
 
         function toggleVaultFilterMenu(e) {
-            if (e) e.stopPropagation();
+            if (e) {
+                if (e.target && e.target.closest('#vaultFilterDropdown')) return;
+                e.stopPropagation();
+            }
             const m = document.getElementById('vaultFilterDropdown');
             const isOpen = m && m.style.display === 'block';
             closeAllMenus();
@@ -539,7 +545,10 @@
         }
 
         function toggleDurationMenu(e) {
-            if (e) e.stopPropagation();
+            if (e) {
+                if (e.target && e.target.closest('#durationDropdown')) return;
+                e.stopPropagation();
+            }
             const m = document.getElementById('durationDropdown');
             const isOpen = m && m.style.display === 'block';
             closeAllMenus();
@@ -547,7 +556,10 @@
         }
 
         function togglePrintMenu(e) {
-            if (e) e.stopPropagation();
+            if (e) {
+                if (e.target && e.target.closest('#printMenuDropdown')) return;
+                e.stopPropagation();
+            }
             const m = document.getElementById('printMenuDropdown');
             const isOpen = m && m.style.display === 'block';
             closeAllMenus();

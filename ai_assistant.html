@@ -1513,6 +1513,7 @@ function handleCreateInvoiceIntent(text) {
 function confirmPendingInvoice(actionId, btnEl) {
     const data = pendingActions[actionId];
     if (!data) return;
+    if (window.SerajDemo && !window.SerajDemo.checkLimit('sales', true)) return;
     btnEl.disabled = true;
 
     const payMode = document.getElementById('payMode_' + actionId)?.value || 'cash';
@@ -1536,6 +1537,10 @@ function confirmPendingInvoice(actionId, btnEl) {
         if (existingC) {
             finalCustId = existingC.id;
         } else {
+            if (window.SerajDemo && !window.SerajDemo.checkLimit('customers', true)) {
+                btnEl.disabled = false;
+                return;
+            }
             finalCustId = (window.Utils && window.Utils.generateUniqueId) ? window.Utils.generateUniqueId('C') : String(now);
             customersDB.push({
                 id: finalCustId,
@@ -1689,6 +1694,7 @@ function handleAddShortageIntent(text) {
         targetNote._lastModified = now;
         targetNote.updatedBy = dName;
     } else {
+        if (window.SerajDemo && !window.SerajDemo.checkLimit('smart_notes', true)) return;
         smartNotesDB.unshift({
             id: (window.Utils && typeof window.Utils.generateUniqueId === 'function') ? String(window.Utils.generateUniqueId()) : String(now),
             title: 'نواقص المساعد الذكي',

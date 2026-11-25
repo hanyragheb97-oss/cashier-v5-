@@ -1452,6 +1452,7 @@
                 const tempSuppliers = DB.getSuppliers(false, false) || [];
                 let s = tempSuppliers.find(x => x && normName(x.name) === normalizedSup);
                 if (!s) {
+                    if (window.SerajDemo && !window.SerajDemo.checkLimit('suppliers', true)) return;
                     const confirmedNew = await SerajConfirm(`المورد "${finalSupDisplay}" غير مسجل في قائمة الموردين.\nهل أنت متأكد من إضافته كمورد جديد وربط الفاتورة به؟`);
                     if (!confirmedNew) return;
                     s = {

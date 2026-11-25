@@ -76,7 +76,7 @@
                     <span id="currentFilterLabel">📑 الفواتير الآجلة ولم تسدد</span>
                     <span style="color: var(--neon-border); font-size: 12px;">▼</span>
 
-                    <div class="dropdown-list" id="accountFilterDropdown">
+                    <div class="dropdown-list" id="accountFilterDropdown" onclick="event.stopPropagation()">
                         <div class="dropdown-item" onclick="setAccountFilter('deferred', event)">📑 الفواتير الآجلة ولم تسدد</div>
                         <div class="dropdown-item" onclick="setAccountFilter('all_invoices', event)">📦 جميع الفواتير</div>
                         <div class="dropdown-item" onclick="setAccountFilter('vouchers', event)">💵 المبالغ المسددة <span class="val-green">له</span> و <span class="val-red">عليه</span></div>
@@ -120,7 +120,7 @@
         <div class="bottom-capsules">
             <div class="capsule" onclick="toggleDurationMenu(event)">
                 📅 <span id="currentDurationLabelOutside">مدى العمل (الكل)</span>
-                <div class="dropdown-menu" id="durationDropdownOutside">
+                <div class="dropdown-menu" id="durationDropdownOutside" onclick="event.stopPropagation()">
                     <div class="dropdown-menu-item" onclick="filterByDate('اليوم', 'today', event)">اليوم</div>
                     <div class="dropdown-menu-item" onclick="filterByDate('أمس', 'yesterday', event)">أمس</div>
                     <div class="dropdown-menu-item" onclick="filterByDate('آخر 7 أيام', '7days', event)">آخر 7 أيام</div>
@@ -134,7 +134,7 @@
 
             <div class="capsule print-btn" onclick="togglePrintOptions(event)">
                 🖨️ خيارات
-                <div class="dropdown-menu" id="floatingPrintMenu">
+                <div class="dropdown-menu" id="floatingPrintMenu" onclick="event.stopPropagation()">
                     <div class="dropdown-menu-item" id="optThermalPrint" onclick="handlePrintAction('thermal')">🧾 طباعة حرارية (80mm)</div>
                     <div class="dropdown-menu-item" onclick="handlePrintAction('a4')">🖨️ طباعة ورقة (A4)</div>
                     <div class="dropdown-menu-item" onclick="handlePrintAction('pdf_export')">📄 مشاركة / تصدير PDF</div>
@@ -395,7 +395,11 @@
         }
 
         function toggleAccountFilterMenu(e) {
-            if (e) { e.stopPropagation(); e.preventDefault(); }
+            if (e) {
+                if (e.target && e.target.closest('#accountFilterDropdown')) return;
+                e.stopPropagation();
+                e.preventDefault();
+            }
             const m = document.getElementById('accountFilterDropdown');
             const isVisible = m && m.style.display === 'block';
             closeAllMenus();
@@ -487,6 +491,7 @@
                 if (matched) {
                     openSupplierAccount(matched.id);
                 } else {
+                    if (window.SerajDemo && !window.SerajDemo.checkLimit('suppliers', true)) return;
                     openAddSupplierModal();
                     document.getElementById('newSuppName').value = rawQuery;
                 }
@@ -641,6 +646,7 @@
         // إضافة وتعديل وحذف المورد
         // =========================================================================
         function openAddSupplierModal() {
+            if (window.SerajDemo && !window.SerajDemo.checkLimit('suppliers', true)) return;
             document.getElementById('newSuppName').value = '';
             document.getElementById('newSuppPhone').value = '';
             window.SerajUI.openModal('addSupplierModal');
@@ -648,6 +654,7 @@
 
         function saveNewSupplier(e) {
             if (e) { e.preventDefault(); e.stopPropagation(); }
+            if (window.SerajDemo && !window.SerajDemo.checkLimit('suppliers', true)) return;
             const name = document.getElementById('newSuppName').value.trim();
             const phone = String(document.getElementById('newSuppPhone').value || '').trim();
             if (!name) return SerajAlert('برجاء إدخال اسم المورد!', 'error');
@@ -1124,6 +1131,8 @@
             const paymentRadio = document.querySelector('input[name="transType"][value="payment"]');
             if (paymentRadio) paymentRadio.checked = true;
 
+            const accView = document.getElementById('supplier-account-view');
+            if (accView) accView.scrollTop = 0;
             window.SerajUI.openModal('addTransactionModal');
             setTimeout(() => document.getElementById('transAmount')?.focus(), 80);
         }
@@ -1661,6 +1670,10 @@
             if (window.SerajAuth && !window.SerajAuth.canAccess('import_export_excel')) {
                 return SerajAlert('⛔ استيراد الموردين من إكسيل مخصص لصاحب المحل (المالك) فقط.', 'error');
             }
+            if (window.SerajDemo && window.SerajDemo.isActive()) {
+                window.SerajDemo.showUpgradeModal('excel_import');
+                return;
+            }
             const inp = document.getElementById('excelImportInput');
             inp.value = '';
             inp.click();
@@ -1669,6 +1682,10 @@
         function importSuppliersExcel(event) {
             if (window.SerajAuth && !window.SerajAuth.canAccess('import_export_excel')) {
                 return SerajAlert('⛔ استيراد الموردين من إكسيل مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
+            if (window.SerajDemo && window.SerajDemo.isActive()) {
+                window.SerajDemo.showUpgradeModal('excel_import');
+                return;
             }
             const file = event.target.files[0];
             if (!file) return;

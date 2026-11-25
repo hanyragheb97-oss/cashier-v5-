@@ -3,7 +3,7 @@
 // مسارات نسبية (./) + مكتبات محلية للعمل أوفلاين 100% + Stale-While-Revalidate آمن
 // =========================================================================
 
-const CACHE_NAME = 'pos-commercial-v5-cache-02';
+const CACHE_NAME = 'pos-commercial-v5-cache-03';
 
 const urlsToCache = [
     './',

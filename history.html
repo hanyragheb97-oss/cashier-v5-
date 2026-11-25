@@ -1316,6 +1316,7 @@
             if (finalCust !== '') {
                 let c = customersDB.find(x => x && !x.isDeleted && !x.isArchived && normCustName(x.name) === normCustName(finalCust));
                 if (!c && !isNowQuotation) {
+                    if (window.SerajDemo && !window.SerajDemo.checkLimit('customers', true)) return;
                     const confirmedNew = await SerajConfirm(`العميل "${finalCust}" غير مسجل في قائمة العملاء.\nهل أنت متأكد من إضافته كعميل جديد وربط الفاتورة به؟`);
                     if (!confirmedNew) return;
                     c = {

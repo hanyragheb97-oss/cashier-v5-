@@ -84,18 +84,7 @@
         </div>
     </div>
 
-    <!-- شريط الطباعة السريع بعد الحفظ -->
-    <div class="bottom-print-bar" id="bottomPrintBar" onclick="event.stopPropagation()">
-        <div style="position: relative;">
-            <button type="button" class="seraj-btn-back" style="height: 44px; padding: 0 18px; flex-direction: row; gap: 6px; font-size: 15px; font-weight: bold;" onclick="togglePrintMenu(event)">🖨️ طباعة / تصدير ▼</button>
-            <div class="print-dropdown-menu" id="printDropdownMenu">
-                <div class="print-dropdown-item" onclick="printLastInvoiceThermal()">🧾 طباعة حرارية (80mm)</div>
-                <div class="print-dropdown-item" onclick="printLastInvoiceA4()">🖨️ طباعة ورقة (A4)</div>
-                <div class="print-dropdown-item" onclick="exportLastInvoiceToPDF()">📄 تصدير / مشاركة PDF</div>
-                <div class="print-dropdown-item" onclick="exportLastInvoiceToExcel()">📊 تصدير Excel</div>
-            </div>
-        </div>
-    </div>
+
 
     <!-- منطقة الطباعة الحرارية المخفية -->
     <div id="printReceiptArea" hidden></div>
@@ -178,7 +167,7 @@
 
     <!-- 2. نافذة حفظ الفاتورة (حسابات المورد) -->
     <div class="seraj-modal-overlay modal-overlay" id="saveModalOverlay" onclick="closeModals()">
-        <div class="seraj-modal compact-modal" onclick="event.stopPropagation()">
+        <div class="seraj-modal compact-modal" onclick="event.stopPropagation(); if (!event.target.closest('#supplierSearch, #supplierResults, .treasury-select')) closeAllMenus();">
             <div class="compact-header"><h3>تأكيد فاتورة المشتريات</h3></div>
 
             <div class="seraj-form-row compact-row">
@@ -208,7 +197,7 @@
                         <span style="font-size: 12px; color: var(--neon-border);">▼</span>
                         <span id="customVaultLabel">الخزينة الرئيسية</span>
                         <span></span>
-                        <div class="dropdown-list" id="customVaultDropdown" style="display: none; position: absolute; left: 0; right: 0; bottom: 100%; top: auto; margin-bottom: 8px; border-radius: 12px; width: 100%; z-index: 2100; overflow: hidden;">
+                        <div class="dropdown-list" id="customVaultDropdown" onclick="event.stopPropagation()" style="display: none; position: absolute; left: 0; right: 0; bottom: 100%; top: auto; margin-bottom: 8px; border-radius: 12px; width: 100%; z-index: 2100; overflow: hidden;">
                             <div class="dropdown-item" style="justify-content: center; padding: 12px;" onclick="setCustomSelect('modalVaultSelect', 'customVaultLabel', 'main', 'الخزينة الرئيسية', event)">الخزينة الرئيسية</div>
                             <div class="dropdown-item" style="justify-content: center; padding: 12px;" onclick="setCustomSelect('modalVaultSelect', 'customVaultLabel', 'insta', 'إنستا (InstaPay)', event)">إنستا (InstaPay)</div>
                             <div class="dropdown-item" style="justify-content: center; padding: 12px;" onclick="setCustomSelect('modalVaultSelect', 'customVaultLabel', 'wallet', 'محفظة إلكترونية', event)">محفظة إلكترونية</div>
@@ -332,6 +321,8 @@
 
         let searchQueue = [];
         let currentQueueQty = 1;
+        let _suppressProductDropdownUntil = 0;
+        let _suppressSupplierDropdownUntil = 0;
 
         let aiMicRecognition = null;
         let isAiMicRecording = false;
@@ -455,7 +446,7 @@
             const resultsDiv = document.getElementById('productResults');
             if (!resultsDiv) return;
 
-            if (!rawInput) {
+            if (!rawInput || Date.now() < _suppressProductDropdownUntil) {
                 resultsDiv.style.display = 'none';
                 resultsDiv.innerHTML = '';
                 return;
@@ -507,8 +498,8 @@
                 const isArchived = Boolean(p.isDeleted || p.isArchived);
                 const archivedBadge = isArchived ? `<span class="val-red" style="font-size:12px; margin-right:5px;">(مؤرشف)</span>` : '';
                 const imgHtml = p.hasImage
-                    ? `<img id="search_img_${safeHTML(p.id)}" class="search-item-img" src="" alt="" style="display:none;">`
-                    : `<span style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:8px;background:var(--card-bg-alt);font-size:18px;flex-shrink:0;">📦</span>`;
+                    ? `<img id="search_img_${safeHTML(p.id)}" class="search-item-img" data-no-fallback="1" src="" alt="" style="display:none;">`
+                    : '';
 
                 return `
                     <div class="dropdown-item ${isArchived ? 'archived-item' : ''}" data-prod-id="${safeHTML(p.id)}">
@@ -591,8 +582,11 @@
         }
 
         function openEditModalForNewItem(productId) {
-            document.getElementById('productSearch').value = '';
-            document.getElementById('productResults').style.display = 'none';
+            _suppressProductDropdownUntil = Date.now() + 350;
+            const pSearch = document.getElementById('productSearch');
+            if (pSearch) { pSearch.value = ''; pSearch.blur(); }
+            const pRes = document.getElementById('productResults');
+            if (pRes) { pRes.style.display = 'none'; pRes.innerHTML = ''; }
 
             loadDB();
             const p = productsDB.find(x => x && String(x.id) === String(productId));
@@ -756,10 +750,19 @@
                 let startX = 0;
                 let startY = 0;
                 let currentX = 0;
+                let startTime = 0;
                 let isPointerActive = false;
                 let isHorizontalSwipe = false;
+                let isVerticalScroll = false;
                 let isLongPress = false;
                 let pressTimer = null;
+
+                const resetRowVisual = () => {
+                    tr.classList.remove('swiping-active', 'swipe-delete-ready');
+                    tr.style.transition = 'transform 0.18s ease, opacity 0.18s ease';
+                    tr.style.transform = 'translateX(0)';
+                    tr.style.opacity = '1';
+                };
 
                 tr.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -769,41 +772,52 @@
                     startX = e.clientX;
                     startY = e.clientY;
                     currentX = startX;
+                    startTime = Date.now();
                     isPointerActive = true;
                     isHorizontalSwipe = false;
+                    isVerticalScroll = false;
                     isLongPress = false;
                     tr.style.transition = 'none';
 
                     clearTimeout(pressTimer);
                     pressTimer = setTimeout(() => {
-                        if (isPointerActive && !isHorizontalSwipe && Math.abs(currentX - startX) < 12) {
+                        if (isPointerActive && !isHorizontalSwipe && !isVerticalScroll && Math.abs(currentX - startX) < 10) {
                             isLongPress = true;
                             isPointerActive = false;
                             if (window.SerajUI && window.SerajUI.armClickShield) window.SerajUI.armClickShield(450);
                             openEditModal(index);
                         }
-                    }, 550);
+                    }, 520);
                 });
 
                 tr.addEventListener('pointermove', (e) => {
-                    if (!isPointerActive) return;
+                    if (!isPointerActive || isVerticalScroll) return;
                     const diffX = e.clientX - startX;
                     const diffY = e.clientY - startY;
-                    if (!isHorizontalSwipe && Math.abs(diffY) > 12) {
-                        clearTimeout(pressTimer);
-                        isPointerActive = false;
-                        return;
-                    }
-                    if (Math.abs(diffX) > 16) {
-                        if (!isHorizontalSwipe) {
-                            isHorizontalSwipe = true;
-                            try { tr.setPointerCapture(e.pointerId); } catch (err) {}
+                    const absX = Math.abs(diffX);
+                    const absY = Math.abs(diffY);
+
+                    if (!isHorizontalSwipe) {
+                        if (absY >= 14 && absY > absX * 1.25) {
+                            isVerticalScroll = true;
+                            clearTimeout(pressTimer);
+                            return;
                         }
-                        clearTimeout(pressTimer);
-                        currentX = e.clientX;
-                        tr.style.transform = `translateX(${diffX}px)`;
-                        tr.style.opacity = String(Math.max(0.25, 1 - Math.abs(diffX) / 280));
+                        if (absX >= 10 && absX > absY * 1.15) {
+                            isHorizontalSwipe = true;
+                            clearTimeout(pressTimer);
+                            tr.classList.add('swiping-active');
+                            try { tr.setPointerCapture(e.pointerId); } catch (err) {}
+                        } else {
+                            return;
+                        }
                     }
+
+                    currentX = e.clientX;
+                    const deleteThreshold = Math.min(72, Math.max(52, (tr.offsetWidth || 300) * 0.22));
+                    tr.classList.toggle('swipe-delete-ready', absX >= deleteThreshold);
+                    tr.style.transform = `translateX(${diffX}px)`;
+                    tr.style.opacity = String(Math.max(0.28, 1 - absX / 220));
                 });
 
                 const finishPointer = (e, canceled = false) => {
@@ -817,32 +831,35 @@
                     if (!isPointerActive) return;
                     isPointerActive = false;
 
-                    if (canceled) {
-                        tr.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
-                        tr.style.transform = 'translateX(0)';
-                        tr.style.opacity = '1';
+                    if (canceled || isVerticalScroll) {
+                        if (isHorizontalSwipe) resetRowVisual();
                         return;
                     }
 
-                    const diffX = currentX - startX;
-                    const diffY = Math.abs((e ? e.clientY : startY) - startY);
+                    const finalX = (e && typeof e.clientX === 'number' && isHorizontalSwipe) ? e.clientX : currentX;
+                    const diffX = finalX - startX;
+                    const absX = Math.abs(diffX);
+                    const absY = Math.abs((e ? e.clientY : startY) - startY);
 
                     if (isHorizontalSwipe) {
-                        if (Math.abs(diffX) > 90) {
-                            tr.style.transition = 'transform 0.22s ease, opacity 0.22s ease';
-                            tr.style.transform = `translateX(${diffX > 0 ? 100 : -100}%)`;
+                        const elapsed = Math.max(1, Date.now() - startTime);
+                        const velocity = absX / elapsed;
+                        const deleteThreshold = Math.min(72, Math.max(52, (tr.offsetWidth || 300) * 0.22));
+                        const shouldDelete = absX >= deleteThreshold || (absX >= 34 && velocity >= 0.32);
+                        if (shouldDelete) {
+                            if (window.SerajUI && window.SerajUI.armClickShield) window.SerajUI.armClickShield(320);
+                            tr.style.transition = 'transform 0.16s ease-out, opacity 0.16s ease-out';
+                            tr.style.transform = `translateX(${diffX > 0 ? 105 : -105}%)`;
                             tr.style.opacity = '0';
                             setTimeout(() => {
                                 invoice.splice(index, 1);
                                 saveDraft();
                                 renderTable();
-                            }, 220);
+                            }, 160);
                         } else {
-                            tr.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
-                            tr.style.transform = 'translateX(0)';
-                            tr.style.opacity = '1';
+                            resetRowVisual();
                         }
-                    } else if (Math.abs(diffX) < 12 && diffY < 12) {
+                    } else if (absX < 10 && absY < 10) {
                         const now = Date.now();
                         if (now - (window._purchasesLastRowTapTs || 0) < 350) return;
                         window._purchasesLastRowTapTs = now;
@@ -882,6 +899,7 @@
         // إضافة منتج جديد سريع (+)
         // =========================================================================
         function openQuickAddModal() {
+            if (window.SerajDemo && !window.SerajDemo.checkLimit('products', true)) return;
             const res = document.getElementById('productResults');
             if (res) res.style.display = 'none';
 
@@ -901,6 +919,7 @@
         }
 
         async function saveNewProductQuick() {
+            if (window.SerajDemo && !window.SerajDemo.checkLimit('products', true)) return;
             const name = window.cleanExcelText(document.getElementById('newProdName').value);
             const cat = window.cleanExcelText(document.getElementById('newProdCategory').value) || 'عام';
             let barcode = String(document.getElementById('newProdBarcode').value || '').trim();
@@ -987,6 +1006,7 @@
         // =========================================================================
         function openSaveModal() {
             if (invoice.length === 0) return SerajAlert('الفاتورة فارغة!', 'error');
+            if (window.SerajDemo && !window.SerajDemo.checkLimit('purchases', true)) return;
 
             const sub = round2(invoice.reduce((s, it) => s + round2((parseFloat(it.purchasePrice) || 0) * (parseFloat(it.qty) || 0)), 0));
             const totalEl = document.getElementById('modalTotal');
@@ -997,7 +1017,7 @@
 
             const draftSup = localStorage.getItem('seraj_draft_supplier') || '';
             document.getElementById('supplierSearch').value = draftSup;
-            handleSupplierInput();
+            handleSupplierInput(true);
 
             document.getElementById('modalDate').value = window.Utils.getLocalDateString();
             document.getElementById('modalPaid').value = sub.toFixed(2);
@@ -1010,11 +1030,12 @@
         }
 
         const debouncedSupplierInput = window.Utils.debounce(function() {
-            handleSupplierInput();
+            handleSupplierInput(false);
         }, 160);
 
-        function handleSupplierInput() {
-            const rawQuery = (document.getElementById('supplierSearch')?.value || '').trim();
+        function handleSupplierInput(silent = false) {
+            const suppInp = document.getElementById('supplierSearch');
+            const rawQuery = (suppInp?.value || '').trim();
             localStorage.setItem('seraj_draft_supplier', rawQuery);
             const resultsDiv = document.getElementById('supplierResults');
             if (!resultsDiv) return;
@@ -1032,6 +1053,12 @@
             const exactMatch = activeSuppliers.find(s => window.Utils.normalizeName(s.name) === normQuery);
             document.getElementById('selectedSupplierId').value = exactMatch ? exactMatch.id : '';
             updateLiveSupplierBalanceUI(exactMatch);
+
+            if (silent || Date.now() < _suppressSupplierDropdownUntil) {
+                resultsDiv.style.display = 'none';
+                resultsDiv.innerHTML = '';
+                return;
+            }
 
             const filtered = activeSuppliers
                 .filter(s => window.Utils.normalizeName(s.name).includes(normQuery))
@@ -1057,10 +1084,15 @@
                         e.stopPropagation();
                         const matched = activeSuppliers.find(x => String(x.id) === String(sid));
                         if (matched) {
-                            document.getElementById('supplierSearch').value = matched.name;
+                            _suppressSupplierDropdownUntil = Date.now() + 400;
+                            if (suppInp) {
+                                suppInp.value = matched.name;
+                                suppInp.blur();
+                            }
                             localStorage.setItem('seraj_draft_supplier', matched.name);
                             document.getElementById('selectedSupplierId').value = matched.id;
                             resultsDiv.style.display = 'none';
+                            resultsDiv.innerHTML = '';
                             updateLiveSupplierBalanceUI(matched);
                         }
                     }, 300);
@@ -1113,6 +1145,10 @@
             }
             if (_isConfirmingPurchaseSave) return;
             if (!invoice || invoice.length === 0) {
+                closeModals();
+                return;
+            }
+            if (window.SerajDemo && !window.SerajDemo.checkLimit('purchases', true)) {
                 closeModals();
                 return;
             }
@@ -1182,6 +1218,10 @@
                         prevDebt = round2(-(parseFloat(s.calculatedBalance ?? s.balance) || 0));
                         newDebt = round2(prevDebt + remaining);
                     } else {
+                        if (window.SerajDemo && !window.SerajDemo.checkLimit('suppliers', true)) {
+                            closeModals();
+                            return;
+                        }
                         const okNewSupp = await SerajConfirm(`المورد "${suppName}" غير مسجل في قائمة الموردين.\nهل أنت متأكد من إضافته كمورد جديد وحفظ الفاتورة باسمه؟`);
                         if (!okNewSupp) return;
 
@@ -1332,9 +1372,6 @@
 
                 window.SerajAudio.playSuccess();
 
-                const bottomPrintBarEl = document.getElementById('bottomPrintBar');
-                if (bottomPrintBarEl) bottomPrintBarEl.style.display = 'flex';
-
                 const printSetting = localStorage.getItem('seraj_auto_print_setting') || 'ask';
                 if (printSetting === 'print' || printSetting === 'auto') {
                     printLastInvoiceThermal();
@@ -1442,21 +1479,18 @@
         // =========================================================================
         // القوائم والنوافذ والصور
         // =========================================================================
-        function togglePrintMenu(e) {
-            if (e) e.stopPropagation();
-            const m = document.getElementById('printDropdownMenu');
-            if (m) m.style.display = m.style.display === 'block' ? 'none' : 'block';
-        }
-
         function closeAllMenus() {
-            ['printDropdownMenu', 'supplierResults', 'productResults', 'customVaultDropdown'].forEach(id => {
+            ['supplierResults', 'productResults', 'customVaultDropdown'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.style.display = 'none';
             });
         }
 
         function toggleCustomSelect(e, dropdownId) {
-            if (e) e.stopPropagation();
+            if (e) {
+                if (e.target && e.target.closest('#' + dropdownId)) return;
+                e.stopPropagation();
+            }
             const menu = document.getElementById(dropdownId);
             const wasOpen = menu && menu.style.display === 'block';
             closeAllMenus();
@@ -1464,7 +1498,7 @@
         }
 
         function setCustomSelect(hiddenInputId, labelId, value, text, e) {
-            if (e) e.stopPropagation();
+            if (e) { e.preventDefault(); e.stopPropagation(); }
             const hiddenInput = document.getElementById(hiddenInputId);
             if (hiddenInput) {
                 hiddenInput.value = value;
@@ -1472,6 +1506,8 @@
             }
             const label = document.getElementById(labelId);
             if (label) label.textContent = text;
+            const vMenu = document.getElementById('customVaultDropdown');
+            if (vMenu) vMenu.style.display = 'none';
             closeAllMenus();
         }
 
@@ -1786,7 +1822,7 @@
                 updatePageBranding();
                 renderTable();
                 if (document.getElementById('saveModalOverlay')?.style.display === 'flex') {
-                    handleSupplierInput();
+                    handleSupplierInput(true);
                 }
             }
         });

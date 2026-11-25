@@ -1212,6 +1212,7 @@ function getSafeTimeMs(val) {
         window.addEventListener('seraj:cloudReady', _refreshSmartAccountantUI);
 
         function openNoteModal(noteId) {
+            if (!noteId && window.SerajDemo && !window.SerajDemo.checkLimit('smart_notes', true)) return;
             let modal = document.getElementById('note-modal');
             if (!modal) return;
             if (window.SerajUI && typeof window.SerajUI.openModal === 'function') {
@@ -1519,6 +1520,10 @@ function getSafeTimeMs(val) {
             if (existingIndex > -1) {
                 currentNotesDB[existingIndex] = noteObj;
             } else {
+                if (window.SerajDemo && !window.SerajDemo.checkLimit('smart_notes', true)) {
+                    closeNoteModal();
+                    return;
+                }
                 currentNotesDB.unshift(noteObj);
             }
             

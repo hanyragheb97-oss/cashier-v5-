@@ -302,15 +302,30 @@
             font-weight: bold;
         }
 
-        .voice-chip button {
-            background: transparent;
-            border: none;
-            color: var(--accent-red);
-            font-weight: bold;
-            cursor: pointer;
-            padding: 0 2px;
-            font-size: 14px;
-            flex: none;
+        #voiceDictModal .voice-chip button.voice-chip-del {
+            background: transparent !important;
+            border: none !important;
+            color: var(--accent-red) !important;
+            font-weight: bold !important;
+            cursor: pointer !important;
+            padding: 0 4px !important;
+            min-width: 22px !important;
+            height: 22px !important;
+            line-height: 22px !important;
+            font-size: 16px !important;
+            flex: none !important;
+            box-shadow: none !important;
+        }
+
+        #voiceDictModal .dict-row-item button.dict-del-btn {
+            background: transparent !important;
+            border: none !important;
+            color: var(--accent-red) !important;
+            font-weight: bold !important;
+            cursor: pointer !important;
+            padding: 4px 10px !important;
+            flex: none !important;
+            box-shadow: none !important;
         }
 
         .dict-rows-box {
@@ -353,6 +368,12 @@
             <div>🏪 <strong id="badge-shop-name">---</strong></div>
             <div>👤 <span id="badge-role-device">---</span></div>
             <div>📦 الباقة: <span id="badge-plan-name" class="val-green">---</span></div>
+        </div>
+
+        <div id="demo-sidebar-banner" style="display: none; flex-direction: column; gap: 8px; background: rgba(250, 204, 21, 0.12); border: 2px solid var(--accent-yellow, #facc15); border-radius: 12px; padding: 10px; margin-bottom: 4px; text-align: center;">
+            <div style="font-size: 13px; font-weight: bold; color: var(--accent-yellow, #facc15);">🧪 أنت في النسخة التجريبية المحدودة</div>
+            <div style="font-size: 11px; color: var(--text-muted);">حد أقصى 5 عناصر لكل قسم (أوفلاين 100%)</div>
+            <button type="button" class="sidebar-btn btn-accent-green" style="justify-content: center; padding: 9px; font-size: 13px;" onclick="handleExitDemoToActivation()">🔓 الخروج وتفعيل النسخة الكاملة</button>
         </div>
 
         <button type="button" class="sidebar-btn owner-only" data-role="owner" onclick="openStoreSettingsModal()">⚙️ إعدادات المتجر والذكاء</button>
@@ -573,6 +594,11 @@
                 <button type="button" id="btnOfflineActivate" class="btn-save-ai" style="width: 100%; margin-top: 8px;" onclick="window.Utils.preventDoubleClick(this, activateOfflineSingle)">🔓 تفعيل الباقة الأوفلاين</button>
             </div>
 
+            <div style="margin-top: 14px; padding-top: 12px; border-top: 1.5px dashed var(--neon-border-soft); text-align: center;">
+                <button type="button" id="btnStartDemoMode" class="sidebar-btn btn-accent-nav" style="justify-content: center; text-align: center; padding: 12px; font-size: 14px;" onclick="window.Utils.preventDoubleClick(this, startDemoTrialMode)">🚀 جرّب النسخة التجريبية مجاناً (بدون تسجيل)</button>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">تعمل أوفلاين بالكامل بصلاحيات المالك (بحد أقصى 5 عناصر لكل قسم)</div>
+            </div>
+
             <p id="login-error" class="val-red" style="display: none; text-align: center; margin-top: 12px; font-size: 14px;"></p>
         </div>
     </div>
@@ -629,11 +655,18 @@
             const bPlan = document.getElementById('badge-plan-name');
             if (bPlan) {
                 const planMap = {
+                    demo: 'النسخة التجريبية المحدودة',
                     offline_single: 'أوفلاين دائم (جهاز واحد)',
                     pro: 'سحابية Pro',
                     vip: 'سحابية VIP'
                 };
                 bPlan.textContent = planMap[sess.plan] || sess.plan;
+                bPlan.className = sess.plan === 'demo' ? 'val-yellow' : 'val-green';
+            }
+
+            const demoBanner = document.getElementById('demo-sidebar-banner');
+            if (demoBanner) {
+                demoBanner.style.display = (sess.plan === 'demo') ? 'flex' : 'none';
             }
 
             // إخفاء الأزرار السحابية في باقة الأوفلاين الدائمة
@@ -761,13 +794,16 @@
 
             const unitsEl = document.getElementById('voiceUnitsList');
             unitsEl.innerHTML = units.length > 0
-                ? units.map(u => `<span class="voice-chip">${safeHTML(u)}<button type="button" data-del-unit="${safeHTML(u)}" title="حذف">×</button></span>`).join('')
+                ? units.map((u, idx) => `<span class="voice-chip">${safeHTML(u)}<button type="button" class="voice-chip-del" data-del-unit-idx="${idx}" title="حذف">×</button></span>`).join('')
                 : `<span class="text-muted" style="font-size:13px;">لا توجد وحدات محفوظة</span>`;
 
-            unitsEl.querySelectorAll('button[data-del-unit]').forEach(btn => {
-                btn.onclick = () => {
-                    const target = btn.getAttribute('data-del-unit');
-                    const next = DB.getVoiceUnits().filter(x => x !== target);
+            unitsEl.querySelectorAll('button[data-del-unit-idx]').forEach(btn => {
+                btn.onclick = (e) => {
+                    if (e) { e.preventDefault(); e.stopPropagation(); }
+                    const idx = parseInt(btn.getAttribute('data-del-unit-idx'), 10);
+                    const target = units[idx];
+                    if (target === undefined) return;
+                    const next = DB.getVoiceUnits().filter(x => String(x) !== String(target));
                     DB.saveVoiceUnits(next);
                     renderVoiceDictUI();
                 };
@@ -776,19 +812,22 @@
             const entries = Object.entries(dict);
             const dictEl = document.getElementById('voiceDictList');
             dictEl.innerHTML = entries.length > 0
-                ? entries.map(([k, v]) => `
+                ? entries.map(([k, v], idx) => `
                     <div class="dict-row-item">
                         <span>${safeHTML(k)} ⬅ <strong class="val-green">${safeHTML(v)}</strong></span>
-                        <button type="button" data-del-dict="${safeHTML(k)}" style="background:transparent; border:none; color:var(--accent-red); font-weight:bold; cursor:pointer; flex:none; padding:2px 8px;">🗑️</button>
+                        <button type="button" class="dict-del-btn" data-del-dict-idx="${idx}" title="حذف">🗑️</button>
                     </div>
                 `).join('')
                 : `<div style="padding:10px; text-align:center; color:var(--text-muted); font-size:13px;">القاموس فارغ</div>`;
 
-            dictEl.querySelectorAll('button[data-del-dict]').forEach(btn => {
-                btn.onclick = () => {
-                    const key = btn.getAttribute('data-del-dict');
+            dictEl.querySelectorAll('button[data-del-dict-idx]').forEach(btn => {
+                btn.onclick = (e) => {
+                    if (e) { e.preventDefault(); e.stopPropagation(); }
+                    const idx = parseInt(btn.getAttribute('data-del-dict-idx'), 10);
+                    const entry = entries[idx];
+                    if (!entry) return;
                     const nextDict = { ...DB.getVoiceDictionary() };
-                    delete nextDict[key];
+                    delete nextDict[entry[0]];
                     DB.saveVoiceDictionary(nextDict);
                     renderVoiceDictUI();
                 };
@@ -855,6 +894,10 @@
 
         function triggerRestoreInput() {
             closeSidebar();
+            if (window.SerajDemo && window.SerajDemo.isActive()) {
+                window.SerajDemo.showUpgradeModal('restore_backup');
+                return;
+            }
             const inp = document.getElementById('restore-file-input');
             if (inp) {
                 inp.value = '';
@@ -934,8 +977,27 @@
             DB.syncFromCloud();
         }
 
+        async function startDemoTrialMode() {
+            await window.SerajAuth.activateDemoMode();
+            const loginScreen = document.getElementById('seraj-login-screen');
+            if (loginScreen) loginScreen.style.display = 'none';
+            window.location.reload();
+        }
+
+        async function handleExitDemoToActivation() {
+            closeSidebar();
+            if (!window.SerajAuth || !window.SerajAuth.isDemoPlan()) return;
+            const ok = await SerajConfirm('سيتم مسح بيانات النسخة التجريبية والانتقال لشاشة الدخول وتفعيل النسخة الكاملة. هل تريد المتابعة؟');
+            if (ok && window.SerajDemo) {
+                await window.SerajDemo.exitAndWipeDemo();
+            }
+        }
+
         async function handleSignOut() {
             closeSidebar();
+            if (window.SerajAuth && window.SerajAuth.isDemoPlan()) {
+                return handleExitDemoToActivation();
+            }
             const ok = await SerajConfirm('هل تريد تسجيل الخروج من هذا المحل؟');
             if (ok) {
                 await window.SerajAuth.signOut();
@@ -1037,6 +1099,9 @@
             const col = e && e.detail ? e.detail.collection : null;
             if (!col || col === 'store_settings' || col === 'voice_config') {
                 updateHomeBrandingAndSessionUI();
+                if (col === 'voice_config' && document.getElementById('voiceDictModal')?.style.display === 'flex') {
+                    renderVoiceDictUI();
+                }
             }
         });
 

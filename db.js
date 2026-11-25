@@ -114,9 +114,9 @@ let myDeviceName = localStorage.getItem('seraj_device_name') || '';
 let myDevicePrefix = localStorage.getItem('seraj_device_prefix') || '';
 const _initialPlanMode = (localStorage.getItem('seraj_plan') || '').toLowerCase();
 
-if (_initialPlanMode === 'offline_single') {
-    myDeviceName = myDeviceName || 'الجهاز الرئيسي';
-    myDevicePrefix = (myDevicePrefix || 'A').toUpperCase();
+if (_initialPlanMode === 'offline_single' || _initialPlanMode === 'demo') {
+    myDeviceName = myDeviceName || (_initialPlanMode === 'demo' ? 'النسخة التجريبية' : 'الجهاز الرئيسي');
+    myDevicePrefix = (myDevicePrefix || (_initialPlanMode === 'demo' ? 'D' : 'A')).toUpperCase();
     try {
         localStorage.setItem('seraj_device_name', myDeviceName);
         localStorage.setItem('seraj_device_prefix', myDevicePrefix);
@@ -175,7 +175,8 @@ const HEAVY_STORAGE_KEYS = new Set([
     'seraj_offline_cert',
     'seraj_bound_device_id',
     'seraj_email_queue',
-    'seraj_ai_history'
+    'seraj_ai_history',
+    'seraj_demo_counters'
 ]);
 
 function _isHeavyStorageKey(key) {
@@ -2076,6 +2077,10 @@ window.ImagesDB = {
         } else {
             el.removeAttribute('src');
             el.style.display = 'none';
+            if (el.getAttribute('data-no-fallback') === '1') {
+                if (existingBox && existingBox.parentNode) existingBox.parentNode.removeChild(existingBox);
+                return;
+            }
             if (parent) {
                 if (!existingBox) {
                     existingBox = document.createElement('span');
@@ -2324,7 +2329,9 @@ window.SerajAuth = {
 
         // Fail-Closed: الافتراضي دائماً cashier إلا بتحقق موثق
         let role = 'cashier';
-        if (plan === 'offline_single') {
+        if (plan === 'demo') {
+            role = 'owner';
+        } else if (plan === 'offline_single') {
             role = this.verifyOfflineCertificate() ? 'owner' : 'cashier';
         } else if (this._verifiedRole === 'owner' || this._verifiedRole === 'cashier') {
             role = this._verifiedRole;
@@ -2343,6 +2350,7 @@ window.SerajAuth = {
             storeId,
             role,
             plan,
+            tier: plan,
             expiryTs,
             maxDevices,
             deviceId: myDeviceId,
@@ -2351,8 +2359,48 @@ window.SerajAuth = {
         };
     },
 
+    isDemoPlan: function() {
+        return (localStorage.getItem('seraj_plan') || '').toLowerCase() === 'demo';
+    },
+
     isOfflineSinglePlan: function() {
-        return (localStorage.getItem('seraj_plan') || '').toLowerCase() === 'offline_single';
+        let p = (localStorage.getItem('seraj_plan') || '').toLowerCase();
+        return p === 'offline_single' || p === 'demo';
+    },
+
+    activateDemoMode: async function() {
+        let demoStoreId = 'LOCAL_TRIAL_MODE';
+        myDeviceName = 'النسخة التجريبية';
+        myDevicePrefix = 'D';
+        window.myDeviceName = myDeviceName;
+        window.myDevicePrefix = myDevicePrefix;
+        _internalSetItem('seraj_device_name', myDeviceName);
+        _internalSetItem('seraj_device_prefix', myDevicePrefix);
+        _internalSetItem('seraj_store_id', demoStoreId);
+        _internalSetItem('seraj_plan', 'demo');
+        _internalSetItem('seraj_tier', 'demo');
+        _internalSetItem('seraj_user_role', 'owner');
+        _internalSetItem('seraj_auth_uid', 'DEMO_LOCAL');
+        _internalSetItem('seraj_role_sig', this._computeRoleSignature(demoStoreId, 'owner', 'DEMO_LOCAL'));
+        localStorage.removeItem('seraj_offline_cert');
+        localStorage.removeItem('seraj_bound_device_id');
+        this._verifiedRole = 'owner';
+        currentStoreId = demoStoreId;
+        this._purgeOfflineCloudResidue();
+        if (!localStorage.getItem('seraj_store_name')) {
+            _internalSetItem('seraj_store_name', 'متجر تجريبي (Demo)');
+        }
+        cloudReady = false;
+        this.applyRoleGuards();
+        if (window.SerajMegaDB && typeof window.SerajMegaDB.setBatch === 'function' && window._serajRAM) {
+            let entries = [];
+            window._serajRAM.forEach((v, k) => {
+                if (String(k).startsWith('seraj_')) entries.push([k, v]);
+            });
+            if (entries.length > 0) await window.SerajMegaDB.setBatch(entries);
+        }
+        window.dispatchEvent(new CustomEvent('seraj:cloudReady', { detail: { mode: 'demo', storeId: demoStoreId } }));
+        return true;
     },
 
     isOwner: function() {
@@ -2416,7 +2464,7 @@ window.SerajAuth = {
         if (document.head && !document.getElementById('seraj-rbac-plan-guards')) {
             let st = document.createElement('style');
             st.id = 'seraj-rbac-plan-guards';
-            st.textContent = 'html[data-store-plan="offline_single"] .cloud-only-btn, html[data-store-plan="offline_single"] .cloud-only, html[data-store-plan="offline_single"] .multi-device-only { display: none !important; } html[data-user-role="cashier"] .owner-only, html[data-user-role="cashier"] [data-role="owner"], html[data-user-role="cashier"] [data-owner-only="true"] { display: none !important; }';
+            st.textContent = 'html[data-store-plan="offline_single"] .cloud-only-btn, html[data-store-plan="offline_single"] .cloud-only, html[data-store-plan="offline_single"] .multi-device-only, html[data-store-plan="demo"] .cloud-only-btn, html[data-store-plan="demo"] .cloud-only, html[data-store-plan="demo"] .multi-device-only { display: none !important; } html[data-user-role="cashier"] .owner-only, html[data-user-role="cashier"] [data-role="owner"], html[data-user-role="cashier"] [data-owner-only="true"] { display: none !important; }';
             document.head.appendChild(st);
         }
 
@@ -2563,7 +2611,7 @@ window.SerajAuth = {
 
     // فحص تذكير النسخ الاحتياطي كل 7 أيام لباقة الأوفلاين
     checkOfflineBackupReminder: function() {
-        if (!this.isOfflineSinglePlan()) return false;
+        if (this.isDemoPlan() || !this.isOfflineSinglePlan()) return false;
         let lastTs = parseInt(localStorage.getItem('seraj_last_offline_backup_ts') || '0', 10) || 0;
         let sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
         if (lastTs > 0 && (Date.now() - lastTs) >= sevenDaysMs) {
@@ -2624,6 +2672,9 @@ window.SerajAuth = {
     },
 
     signOut: async function() {
+        if (this.isDemoPlan() && window.SerajDemo && typeof window.SerajDemo.exitAndWipeDemo === 'function') {
+            return await window.SerajDemo.exitAndWipeDemo();
+        }
         try {
             if (typeof firebase !== 'undefined' && firebase.auth) {
                 await firebase.auth().signOut();
@@ -2638,8 +2689,222 @@ window.SerajAuth = {
         localStorage.removeItem('seraj_role_sig');
         localStorage.removeItem('seraj_auth_uid');
         localStorage.removeItem('seraj_plan');
+        localStorage.removeItem('seraj_tier');
         localStorage.removeItem('seraj_expiry_ts');
         window.location.replace('index.html');
+    }
+};
+
+// =========================================================================
+// محرك النسخة التجريبية المجانية (Demo Mode — حد أقصى 5 عناصر + عداد تراكمي)
+// =========================================================================
+window.SerajDemo = {
+    LIMIT: 5,
+    WHATSAPP_NUMBER: '201114477240',
+    WHATSAPP_MSG: 'مرحباً، جربت النسخة التجريبية من البرنامج وأرغب في تفعيل النسخة الكاملة',
+
+    isActive: function() {
+        return Boolean(window.SerajAuth && typeof window.SerajAuth.isDemoPlan === 'function' && window.SerajAuth.isDemoPlan());
+    },
+
+    getCounters: function() {
+        let raw = safeParseJSON(localStorage.getItem('seraj_demo_counters'), null);
+        if (!raw || typeof raw !== 'object') {
+            return { sales: 0, purchases: 0, salesIds: [], purchaseIds: [] };
+        }
+        let salesIds = Array.isArray(raw.salesIds) ? raw.salesIds.map(String) : [];
+        let purchaseIds = Array.isArray(raw.purchaseIds) ? raw.purchaseIds.map(String) : [];
+        return {
+            sales: Math.max(parseInt(raw.sales, 10) || 0, salesIds.length),
+            purchases: Math.max(parseInt(raw.purchases, 10) || 0, purchaseIds.length),
+            salesIds: salesIds,
+            purchaseIds: purchaseIds
+        };
+    },
+
+    _saveCounters: function(counters) {
+        _internalSetItem('seraj_demo_counters', JSON.stringify(counters));
+    },
+
+    recordInvoiceIds: function(kind, idsArray) {
+        if (!this.isActive() || !Array.isArray(idsArray) || idsArray.length === 0) return;
+        let counters = this.getCounters();
+        let listKey = (kind === 'purchases') ? 'purchaseIds' : 'salesIds';
+        let countKey = (kind === 'purchases') ? 'purchases' : 'sales';
+        let idSet = new Set(counters[listKey]);
+        let added = 0;
+        idsArray.forEach(rawId => {
+            let sid = String(rawId || '').trim();
+            if (sid && !idSet.has(sid)) {
+                idSet.add(sid);
+                counters[listKey].push(sid);
+                added++;
+            }
+        });
+        if (added > 0) {
+            counters[countKey] = Math.max(counters[countKey] + added, counters[listKey].length);
+            this._saveCounters(counters);
+        }
+    },
+
+    getCurrentUsage: function(category) {
+        if (category === 'products') {
+            return (window.DB && typeof window.DB.getProducts === 'function') ? window.DB.getProducts(false).length : 0;
+        }
+        if (category === 'sales') {
+            let c = this.getCounters();
+            let existingCount = (window.DB && typeof window.DB.getSalesInvoices === 'function') ? window.DB.getSalesInvoices(true).length : 0;
+            return Math.max(c.sales, c.salesIds.length, existingCount);
+        }
+        if (category === 'purchases') {
+            let c = this.getCounters();
+            let existingCount = (window.DB && typeof window.DB.getPurchaseInvoices === 'function') ? window.DB.getPurchaseInvoices(true).length : 0;
+            return Math.max(c.purchases, c.purchaseIds.length, existingCount);
+        }
+        if (category === 'customers') {
+            return (window.DB && typeof window.DB.getCustomers === 'function') ? window.DB.getCustomers(true, false).length : 0;
+        }
+        if (category === 'suppliers') {
+            return (window.DB && typeof window.DB.getSuppliers === 'function') ? window.DB.getSuppliers(true, false).length : 0;
+        }
+        if (category === 'smart_notes') {
+            return (window.DB && typeof window.DB.getSmartNotes === 'function') ? window.DB.getSmartNotes(false).length : 0;
+        }
+        return 0;
+    },
+
+    checkLimit: function(category, showModalOnBlock = true) {
+        if (!this.isActive()) return true;
+        if (category === 'restore_backup' || category === 'excel_import') {
+            if (showModalOnBlock) this.showUpgradeModal(category);
+            return false;
+        }
+        let used = this.getCurrentUsage(category);
+        if (used >= this.LIMIT) {
+            if (showModalOnBlock) this.showUpgradeModal(category);
+            return false;
+        }
+        return true;
+    },
+
+    showUpgradeModal: function(category = '') {
+        let oldEl = document.getElementById('seraj-demo-upgrade-modal');
+        if (oldEl && oldEl.parentNode) oldEl.parentNode.removeChild(oldEl);
+
+        const reasonMap = {
+            products: 'لقد وصلت للحد الأقصى المسموح به للأصناف (5 أصناف) في النسخة التجريبية.',
+            sales: 'لقد وصلت للحد الأقصى المسموح به لفواتير البيع (5 فواتير) في النسخة التجريبية.',
+            purchases: 'لقد وصلت للحد الأقصى المسموح به لفواتير الشراء (5 فواتير) في النسخة التجريبية.',
+            customers: 'لقد وصلت للحد الأقصى المسموح به للعملاء (5 عملاء) في النسخة التجريبية.',
+            suppliers: 'لقد وصلت للحد الأقصى المسموح به للموردين (5 موردين) في النسخة التجريبية.',
+            smart_notes: 'لقد وصلت للحد الأقصى المسموح به لملاحظات المحاسب الذكي (5 ملاحظات) في النسخة التجريبية.',
+            restore_backup: 'ميزة استرجاع النسخ الاحتياطية غير متاحة في النسخة التجريبية المجانية.',
+            excel_import: 'ميزة استيراد ملفات الإكسيل غير متاحة في النسخة التجريبية المجانية.'
+        };
+        let desc = reasonMap[category] || 'لقد وصلت للحد الأقصى المسموح به في النسخة التجريبية المجانية (5 عناصر).';
+        let waUrl = `https://wa.me/${this.WHATSAPP_NUMBER}?text=${encodeURIComponent(this.WHATSAPP_MSG)}`;
+
+        let modal = document.createElement('div');
+        modal.id = 'seraj-demo-upgrade-modal';
+        modal.style.cssText = 'position:fixed; inset:0; width:100%; height:100%; background:rgba(7,9,19,0.92); z-index:100010; display:none; justify-content:center; align-items:center; padding:16px; direction:rtl; box-sizing:border-box;';
+
+        let box = document.createElement('div');
+        box.style.cssText = 'background:var(--card-bg, #0f172a); padding:24px 20px; border-radius:18px; border:2px solid var(--accent-yellow, #facc15); color:var(--text-main, #ffffff); text-align:center; width:100%; max-width:420px; box-shadow:0 0 30px rgba(0,0,0,0.85); box-sizing:border-box;';
+        box.onclick = (e) => e.stopPropagation();
+
+        box.innerHTML = `
+            <div style="font-size:40px; margin-bottom:8px;">🚀</div>
+            <h3 style="margin:0 0 10px 0; color:var(--accent-yellow, #facc15); font-size:20px;">النسخة التجريبية المحدودة</h3>
+            <p style="font-size:15px; line-height:1.7; margin:0 0 16px 0; color:var(--text-main, #ffffff);">${window.Utils.sanitizeHTML(desc)}<br><span style="font-size:13px; color:var(--text-muted, #cbd5e1);">فعّل النسخة الكاملة الآن للاستمتاع بعدد غير محدود من الأصناف والفواتير والعملاء والتقارير.</span></p>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <a id="demo-wa-upgrade-btn" href="${waUrl}" target="_blank" rel="noopener" style="display:flex; justify-content:center; align-items:center; gap:8px; background:#16a34a; color:#ffffff; text-decoration:none; padding:12px 14px; border-radius:12px; font-weight:bold; font-size:15px; border:2px solid #22c55e;">💬 تواصل واتساب لتفعيل النسخة الكاملة</a>
+                <button type="button" id="demo-activate-code-btn" style="background:var(--btn-nav-bg, #1d4ed8); color:var(--btn-nav-text, #ffffff); border:2px solid var(--btn-nav-border, #3b82f6); padding:12px 14px; border-radius:12px; font-weight:bold; font-size:15px; cursor:pointer;">🔓 لديّ كود تفعيل</button>
+                <button type="button" id="demo-close-upgrade-btn" style="background:transparent; color:var(--text-muted, #cbd5e1); border:1px solid var(--neon-border-soft, rgba(59,130,246,0.3)); padding:9px 14px; border-radius:10px; font-weight:bold; font-size:14px; cursor:pointer;">متابعة التصفح</button>
+            </div>
+        `;
+
+        modal.appendChild(box);
+        document.body.appendChild(modal);
+        modal.onclick = () => window.SerajUI.closeModal(modal);
+        window.SerajAudio.playError();
+        window.SerajUI.openModal(modal, { display: 'flex', removeOnClose: true, useHistory: false });
+
+        let actBtn = modal.querySelector('#demo-activate-code-btn');
+        if (actBtn) {
+            actBtn.onclick = async () => {
+                actBtn.disabled = true;
+                actBtn.textContent = '⏳ جاري تجهيز شاشة التفعيل...';
+                await window.SerajDemo.exitAndWipeDemo();
+            };
+        }
+        let closeBtn = modal.querySelector('#demo-close-upgrade-btn');
+        if (closeBtn) closeBtn.onclick = () => window.SerajUI.closeModal(modal);
+    },
+
+    exitAndWipeDemo: async function() {
+        if (!window.SerajAuth || !window.SerajAuth.isDemoPlan()) return false;
+        try {
+            let preserved = {};
+            const shouldKeepKey = (k) => k === 'seraj_device_id' || k.startsWith('seraj_theme_');
+
+            let allKeys = new Set();
+            if (window._serajRAM) {
+                window._serajRAM.forEach((v, k) => {
+                    if (String(k).startsWith('seraj_')) {
+                        if (shouldKeepKey(k)) preserved[k] = v;
+                        else allKeys.add(k);
+                    }
+                });
+            }
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    let k = localStorage.key(i);
+                    if (k && k.startsWith('seraj_')) {
+                        if (shouldKeepKey(k)) preserved[k] = _rawNativeGetItem(k);
+                        else allKeys.add(k);
+                    }
+                }
+            } catch (e) {}
+
+            allKeys.forEach(k => {
+                if (window._serajRAM) window._serajRAM.delete(k);
+                try { _rawNativeRemoveItem(k); } catch (e) {}
+            });
+
+            if (window.SerajMegaDB && typeof window.SerajMegaDB.clearAll === 'function') {
+                await window.SerajMegaDB.clearAll();
+                let restoreEntries = Object.entries(preserved).filter(([, v]) => v !== null && v !== undefined);
+                if (restoreEntries.length > 0 && typeof window.SerajMegaDB.setBatch === 'function') {
+                    await window.SerajMegaDB.setBatch(restoreEntries);
+                }
+            }
+
+            if (window.ImagesDB && typeof window.ImagesDB.open === 'function') {
+                try {
+                    let imgDb = await window.ImagesDB.open();
+                    await new Promise((resolve) => {
+                        try {
+                            let tx = imgDb.transaction([window.ImagesDB.storeName], 'readwrite');
+                            tx.objectStore(window.ImagesDB.storeName).clear();
+                            tx.oncomplete = () => resolve(true);
+                            tx.onerror = () => resolve(false);
+                        } catch (e) { resolve(false); }
+                    });
+                    if (window.ImagesDB._urlCache) window.ImagesDB._urlCache.clear();
+                } catch (e) {}
+            }
+        } catch (err) {
+            console.error('Demo Wipe Error:', err);
+        }
+
+        cloudReady = false;
+        currentStoreId = '';
+        window.SerajAuth._currentUser = null;
+        window.SerajAuth._claims = null;
+        window.SerajAuth._verifiedRole = null;
+        _broadcastTabChange('reload_required', 'all', null);
+        window.location.replace('index.html');
+        return true;
     }
 };
 
@@ -3229,8 +3494,22 @@ function startSmartRadars() {
             if (vCfg.sales && vCfg.sales.settings) _internalSetItem(window.DB._getVoiceStorageKey('settings', 'sales'), JSON.stringify(vCfg.sales.settings));
             if (vCfg.purchases && vCfg.purchases.settings) _internalSetItem(window.DB._getVoiceStorageKey('settings', 'purchases'), JSON.stringify(vCfg.purchases.settings));
             if (vCfg.inventory && vCfg.inventory.settings) _internalSetItem(window.DB._getVoiceStorageKey('settings', 'inventory'), JSON.stringify(vCfg.inventory.settings));
-            if (vCfg.units) _internalSetItem(window.DB._getVoiceStorageKey('units'), JSON.stringify(vCfg.units));
-            if (vCfg.dictionary) _internalSetItem(window.DB._getVoiceStorageKey('dict'), JSON.stringify(vCfg.dictionary));
+            if (Array.isArray(vCfg.units)) {
+                _internalSetItem(window.DB._getVoiceStorageKey('units'), JSON.stringify(vCfg.units));
+            } else if (vCfg.unitsEmpty) {
+                _internalSetItem(window.DB._getVoiceStorageKey('units'), '[]');
+            }
+            if (Array.isArray(vCfg.dictionaryEntries)) {
+                let rebuiltDict = {};
+                vCfg.dictionaryEntries.forEach(entry => {
+                    if (entry && entry.k !== undefined) rebuiltDict[String(entry.k)] = String(entry.v ?? '');
+                });
+                _internalSetItem(window.DB._getVoiceStorageKey('dict'), JSON.stringify(rebuiltDict));
+            } else if (vCfg.dictEmpty) {
+                _internalSetItem(window.DB._getVoiceStorageKey('dict'), '{}');
+            } else if (vCfg.dictionary && typeof vCfg.dictionary === 'object') {
+                _internalSetItem(window.DB._getVoiceStorageKey('dict'), JSON.stringify(vCfg.dictionary));
+            }
             if (typeof SmartVoice !== 'undefined') SmartVoice._invalidateShadowCache();
             emitSerajUpdate('voice_config', 'cloud');
         }
@@ -3242,6 +3521,14 @@ async function initCloud() {
     await window.SerajMegaDB.ready;
     currentStoreId = getActiveStoreId();
     window.SerajAuth.applyRoleGuards();
+
+    // 0. وضع النسخة التجريبية المجانية (Demo Mode — أوفلاين 100% و0 استهلاك سحابة)
+    if (window.SerajAuth.isDemoPlan()) {
+        cloudReady = false;
+        window.SerajAuth._purgeOfflineCloudResidue();
+        window.dispatchEvent(new CustomEvent('seraj:cloudReady', { detail: { mode: 'demo', storeId: currentStoreId } }));
+        return;
+    }
 
     // 1. وضع باقة جهاز واحد أوفلاين (0 استهلاك Firebase + تحقق إلزامي من الشهادة على كل الصفحات)
     if (window.SerajAuth.isOfflineSinglePlan()) {
@@ -6582,6 +6869,23 @@ window.DB = {
         if (!Array.isArray(data)) return;
         let oldCache = safeParseJSON(localStorage.getItem('seraj_sales_invoices') || localStorage.getItem('seraj_cloud_cache_sales_invoices'), []);
         let oldMap = new Map(oldCache.map(i => [String(i?.id), i]));
+        let _demoNewSalesIds = [];
+        if (window.SerajDemo && window.SerajDemo.isActive() && !this._isCalculatingBalances) {
+            let _dCounters = window.SerajDemo.getCounters();
+            let _recordedSalesSet = new Set(_dCounters.salesIds);
+            let _trulyNewCount = 0;
+            data.forEach(inv => {
+                if (!inv) return;
+                let invIdStr = (inv.id !== undefined && inv.id !== null && inv.id !== '') ? String(inv.id) : '';
+                if (!invIdStr || (!oldMap.has(invIdStr) && !_recordedSalesSet.has(invIdStr))) {
+                    _trulyNewCount++;
+                }
+            });
+            if (_trulyNewCount > 0 && (_dCounters.sales + _trulyNewCount) > window.SerajDemo.LIMIT) {
+                window.SerajDemo.showUpgradeModal('sales');
+                return false;
+            }
+        }
         let rawCustomers = safeParseJSON(localStorage.getItem('seraj_customers'), []);
         let allMoves = safeParseJSON(localStorage.getItem('seraj_treasury_moves'), []);
         let now = getServerNow();
@@ -6630,6 +6934,7 @@ window.DB = {
                 let oldInv = oldMap.get(String(cleanInv.id));
 
                 if (!oldInv) {
+                    _demoNewSalesIds.push(String(cleanInv.id));
                     if (cleanInv.initialPaid === undefined || cleanInv.initialPaid === null || isNaN(parseFloat(cleanInv.initialPaid))) {
                         cleanInv.initialPaid = Math.max(0, round2(cleanInv.paid));
                     }
@@ -6703,6 +7008,9 @@ window.DB = {
         }).filter(Boolean);
 
         _internalSetItem('seraj_sales_invoices', JSON.stringify(cleanData));
+        if (window.SerajDemo && window.SerajDemo.isActive() && _demoNewSalesIds.length > 0) {
+            window.SerajDemo.recordInvoiceIds('sales', _demoNewSalesIds);
+        }
         this._updateInvoiceCountersFromList('sales', cleanData, true);
         saveArrayToQueueSafely('sales_invoices', cleanData);
 
@@ -6833,6 +7141,23 @@ window.DB = {
 
         let oldCache = safeParseJSON(localStorage.getItem('seraj_purchase_invoices') || localStorage.getItem('seraj_cloud_cache_purchase_invoices'), []);
         let oldMap = new Map(oldCache.map(i => [String(i?.id), i]));
+        let _demoNewPurchaseIds = [];
+        if (window.SerajDemo && window.SerajDemo.isActive() && !this._isCalculatingBalances) {
+            let _dCounters = window.SerajDemo.getCounters();
+            let _recordedPurchSet = new Set(_dCounters.purchaseIds);
+            let _trulyNewCount = 0;
+            data.forEach(inv => {
+                if (!inv) return;
+                let invIdStr = (inv.id !== undefined && inv.id !== null && inv.id !== '') ? String(inv.id) : '';
+                if (!invIdStr || (!oldMap.has(invIdStr) && !_recordedPurchSet.has(invIdStr))) {
+                    _trulyNewCount++;
+                }
+            });
+            if (_trulyNewCount > 0 && (_dCounters.purchases + _trulyNewCount) > window.SerajDemo.LIMIT) {
+                window.SerajDemo.showUpgradeModal('purchases');
+                return false;
+            }
+        }
         let rawSuppliers = safeParseJSON(localStorage.getItem('seraj_suppliers'), []);
         let allMoves = safeParseJSON(localStorage.getItem('seraj_treasury_moves'), []);
         let now = getServerNow();
@@ -6884,6 +7209,7 @@ window.DB = {
                 }
 
                 if (!oldInv) {
+                    _demoNewPurchaseIds.push(String(cleanInv.id));
                     if (cleanInv.initialPaid === undefined || cleanInv.initialPaid === null || isNaN(parseFloat(cleanInv.initialPaid))) {
                         cleanInv.initialPaid = Math.max(0, round2(cleanInv.paid));
                     }
@@ -6956,6 +7282,9 @@ window.DB = {
         }).filter(Boolean);
 
         _internalSetItem('seraj_purchase_invoices', JSON.stringify(cleanData));
+        if (window.SerajDemo && window.SerajDemo.isActive() && _demoNewPurchaseIds.length > 0) {
+            window.SerajDemo.recordInvoiceIds('purchases', _demoNewPurchaseIds);
+        }
         this._updateInvoiceCountersFromList('purchases', cleanData, true);
         saveArrayToQueueSafely('purchase_invoices', cleanData);
 
@@ -7913,6 +8242,10 @@ window.DB = {
             window.SerajAlert('⛔ استعادة النسخة الاحتياطية مخصصة لصاحب المحل (المالك) فقط.', 'error');
             return false;
         }
+        if (window.SerajDemo && window.SerajDemo.isActive()) {
+            window.SerajDemo.showUpgradeModal('restore_backup');
+            return false;
+        }
         let parsed = (typeof backupPayload === 'string') ? safeParseJSON(backupPayload, null) : backupPayload;
         if (!parsed || typeof parsed !== 'object') {
             window.SerajAlert('❌ ملف النسخة الاحتياطية غير صالح أو تالف.', 'error');
@@ -8427,16 +8760,25 @@ Object.assign(window.DB, {
 
     _syncVoiceConfigToCloud: function() {
         if (cloudReady && navigator.onLine && !window.SerajAuth.isOfflineSinglePlan()) {
-            let ref = _getStoreCloudRef('voice_studio_v5');
-            if (!ref) return;
-            ref.set({
-                sales: { settings: this.getVoiceSettings('sales') },
-                purchases: { settings: this.getVoiceSettings('purchases') },
-                inventory: { settings: this.getVoiceSettings('inventory') },
-                units: this.getVoiceUnits(),
-                dictionary: this.getVoiceDictionary(),
-                updatedAt: getServerNow()
-            }).catch(() => {});
+            try {
+                let ref = _getStoreCloudRef('voice_studio_v5');
+                if (!ref) return;
+                let unitsArr = this.getVoiceUnits();
+                let dictObj = this.getVoiceDictionary();
+                let dictEntries = Object.entries(dictObj || {}).map(([k, v]) => ({ k: String(k), v: String(v) }));
+                ref.set({
+                    sales: { settings: this.getVoiceSettings('sales') },
+                    purchases: { settings: this.getVoiceSettings('purchases') },
+                    inventory: { settings: this.getVoiceSettings('inventory') },
+                    units: unitsArr,
+                    unitsEmpty: unitsArr.length === 0,
+                    dictionaryEntries: dictEntries,
+                    dictEmpty: dictEntries.length === 0,
+                    updatedAt: getServerNow()
+                }).catch(() => {});
+            } catch (err) {
+                console.warn('Voice Cloud Sync Warning:', err);
+            }
         }
     }
 });

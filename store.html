@@ -871,6 +871,7 @@
             if (window.SerajAuth && !window.SerajAuth.canAccess('add_product')) {
                 return SerajAlert('⛔ إضافة الأصناف مخصصة لصاحب المحل (المالك) فقط.', 'error');
             }
+            if (window.SerajDemo && !window.SerajDemo.checkLimit('products', true)) return;
             document.getElementById('addProdName').value = '';
             document.getElementById('addProdCategory').value = '';
             document.getElementById('addProdBarcode').value = '';
@@ -888,6 +889,7 @@
             if (window.SerajAuth && !window.SerajAuth.canAccess('add_product')) {
                 return SerajAlert('⛔ إضافة الأصناف مخصصة لصاحب المحل (المالك) فقط.', 'error');
             }
+            if (window.SerajDemo && !window.SerajDemo.checkLimit('products', true)) return;
             const allProductsDB = DB.getProducts(true) || [];
             const activeProducts = allProductsDB.filter(p => p && !p.isDeleted && !p.isArchived);
 
@@ -1622,6 +1624,10 @@
             if (window.SerajAuth && !window.SerajAuth.canAccess('import_export_excel')) {
                 return SerajAlert('⛔ استيراد الإكسيل مخصص لصاحب المحل (المالك) فقط.', 'error');
             }
+            if (window.SerajDemo && window.SerajDemo.isActive()) {
+                window.SerajDemo.showUpgradeModal('excel_import');
+                return;
+            }
             const input = document.getElementById('excelFileInput');
             input.value = '';
             input.click();
@@ -1631,6 +1637,10 @@
         function handleExcelImport(e) {
             if (window.SerajAuth && !window.SerajAuth.canAccess('import_export_excel')) {
                 return SerajAlert('⛔ استيراد الإكسيل مخصص لصاحب المحل (المالك) فقط.', 'error');
+            }
+            if (window.SerajDemo && window.SerajDemo.isActive()) {
+                window.SerajDemo.showUpgradeModal('excel_import');
+                return;
             }
             const file = e.target.files[0];
             if (!file) return;
